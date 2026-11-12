@@ -1,0 +1,5 @@
+.\run.ps1 -Web
+
+cd apps\api; .\.venv\Scripts\Activate.ps1; python run_server.py
+
+or double click on run.bat

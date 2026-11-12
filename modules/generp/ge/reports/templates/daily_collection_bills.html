@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bills Summary</title>
+  <style type="text/css">
+    body { font-family: "Times New Roman", Times, serif; font-size: 11pt; font-weight: bold; color: #000; margin: 0; }
+    p { margin: 0; padding: 0; }
+    table { border-collapse: collapse; width: 100%; }
+    .header-title { font-size: 18pt; text-align: center; }
+    .header-sub { font-size: 12pt; text-align: center; text-decoration: underline; margin: 6px 0; }
+    .meta { font-size: 11pt; margin: 4px 0 8px; }
+    .grid { border: 1px solid #000; padding: 3px 4px; font-size: 10pt; }
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
+    .tot { font-weight: bold; }
+    @media print {
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+    }
+  </style>
+</head>
+<body>
+  {% include "_company_header.html" %}
+  <p class="header-sub">Bills Summary</p>
+  <p class="meta">
+    {% if date %}{{ date }}{% else %}From {{ date_from }} to {{ date_to }}{% endif %}
+    {% if bill_from or bill_to %}
+      · Bill {{ bill_from or '—' }} to {{ bill_to or '—' }}
+    {% endif %}
+  </p>
+
+  <table border="1" cellspacing="0" cellpadding="3">
+    <thead>
+      <tr>
+        <td class="grid">Date</td>
+        <td class="grid">Bill No</td>
+        <td class="grid">Type</td>
+        <td class="grid">Customer</td>
+        {% for rate in gst_rates %}
+        <td class="grid" align="right">{{ rate }}%</td>
+        {% endfor %}
+        <td class="grid" align="right">Total</td>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in bills %}
+      <tr>
+        <td class="grid">{{ b.voucher_date }}</td>
+        <td class="grid">{{ b.voucher_no }}</td>
+        <td class="grid">{{ b.voucher_type }}</td>
+        <td class="grid">{{ b.party_name }}</td>
+        {% for rate in gst_rates %}
+        <td class="grid" align="right">{{ "%.2f"|format(b.amounts.get(rate, 0)) }}</td>
+        {% endfor %}
+        <td class="grid" align="right">{{ "%.2f"|format(b.total) }}</td>
+      </tr>
+      {% endfor %}
+      {% if not bills %}
+      <tr><td class="grid" colspan="{{ 5 + (gst_rates|length) }}" align="center">No bills in this range</td></tr>
+      {% endif %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td class="grid tot" colspan="4" align="right">Total{% if totals.bill_count %} ({{ totals.bill_count }} bills){% endif %}</td>
+        {% for rate in gst_rates %}
+        <td class="grid tot" align="right">{{ "%.2f"|format(totals.amounts.get(rate, 0)) }}</td>
+        {% endfor %}
+        <td class="grid tot" align="right">{{ "%.2f"|format(totals.total) }}</td>
+      </tr>
+    </tfoot>
+  </table>
+</body>
+</html>

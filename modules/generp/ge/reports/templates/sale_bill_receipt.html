@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ bill_title }} - {{ bill_no }}</title>
+  <style type="text/css">
+    body {
+      font-family: "Times New Roman", Times, serif;
+      font-size: 11pt;
+      font-weight: bold;
+      color: #000000;
+      margin: 0;
+      padding: 0;
+      height: auto;
+    }
+    @page { {{ page_css | default('size: A4 portrait; margin: 8mm;') }} }
+    p { margin: 0; padding: 0; color: #000000; }
+    table { border-collapse: collapse; }
+    .header-title {
+      font-size: 18pt;
+      font-weight: bold;
+      color: #000000;
+      text-align: center;
+    }
+    .header-meta {
+      font-size: 11pt;
+      font-weight: bold;
+      color: #000000;
+      text-align: center;
+    }
+    .header-sub {
+      font-size: 12pt;
+      font-weight: bold;
+      color: #000000;
+      text-align: center;
+      text-decoration: underline;
+      margin-top: 4px;
+      margin-bottom: 6px;
+    }
+    .meta {
+      font-size: 11pt;
+      font-weight: bold;
+      color: #000000;
+    }
+    .grid {
+      font-size: 10pt;
+      font-weight: bold;
+      color: #000000;
+      border: 1px solid #000000;
+      padding: 3px 4px;
+    }
+    .note {
+      font-size: 9pt;
+      font-weight: normal;
+      color: #000000;
+    }
+  </style>
+</head>
+<body>
+  <table width="100%" border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center">
+        {% include "_company_header.html" %}
+        <p class="header-sub">{{ bill_title }}</p>
+      </td>
+    </tr>
+  </table>
+
+  <table width="100%" border="0" cellspacing="0" cellpadding="2">
+    <tr>
+      <td width="34%" class="meta" align="left">Customer : {{ customer_name }}</td>
+      <td width="33%" class="meta" align="center">Mobile : {{ customer_mobile }}</td>
+      <td width="33%" class="meta" align="right">Date : {{ bill_date }}</td>
+    </tr>
+    <tr>
+      <td width="34%" class="meta" align="left">GSTIN : {{ customer_gstin }}</td>
+      <td width="33%" class="meta" align="center">Type : {{ cash_credit }}</td>
+      <td width="33%" class="meta" align="right">Bill No : {{ bill_no }}</td>
+    </tr>
+  </table>
+
+  <table width="100%" border="1" cellspacing="0" cellpadding="3" style="margin-top:6px;">
+    <tr>
+      <td width="5%" class="grid" align="center">#</td>
+      <td width="10%" class="grid" align="left">Code</td>
+      <td width="28%" class="grid" align="left">Product</td>
+      <td width="9%" class="grid" align="right">Qty</td>
+      <td width="10%" class="grid" align="right">Rate</td>
+      <td width="8%" class="grid" align="right">Disc%</td>
+      <td width="10%" class="grid" align="right">Taxable</td>
+      <td width="8%" class="grid" align="right">GST</td>
+      <td width="12%" class="grid" align="right">Amount</td>
+    </tr>
+    {% for line in lines %}
+    <tr>
+      <td width="5%" class="grid" align="center">{{ line.sr }}</td>
+      <td width="10%" class="grid" align="left">{{ line.code }}</td>
+      <td width="28%" class="grid" align="left">{{ line.name }}</td>
+      <td width="9%" class="grid" align="right">{{ line.qty }}</td>
+      <td width="10%" class="grid" align="right">{{ line.rate }}</td>
+      <td width="8%" class="grid" align="right">{{ line.disc_pct }}</td>
+      <td width="10%" class="grid" align="right">{{ line.taxable }}</td>
+      <td width="8%" class="grid" align="right">{{ line.gst }}</td>
+      <td width="12%" class="grid" align="right">{{ line.amount }}</td>
+    </tr>
+    {% endfor %}
+    <tr>
+      <td colspan="7" class="grid" align="right">Tax Total :</td>
+      <td class="grid" align="right">{{ tax_amount }}</td>
+      <td class="grid" align="right">&nbsp;</td>
+    </tr>
+    <tr>
+      <td colspan="8" class="grid" align="right">Net Amount :</td>
+      <td class="grid" align="right">{{ net_amount }}</td>
+    </tr>
+  </table>
+
+  <table width="100%" border="0" cellspacing="0" cellpadding="2" style="margin-top:8px;">
+    <tr>
+      <td width="50%" class="meta" align="left">Paid : {{ paid_amount }}</td>
+      <td width="50%" class="meta" align="right">
+        Payment :
+        {%- if payments and payments|length > 0 -%}
+          {%- for payment in payments -%}
+            {{ payment.mode }} ({{ payment.amount }}){% if payment.document %} {{ payment.document }}{% endif %}{% if not loop.last %}, {% endif %}
+          {%- endfor -%}
+        {%- else -%}
+          {{ payment_mode | default('—') }}
+        {%- endif -%}
+      </td>
+    </tr>
+    {% if credit_amount != '0.00' %}
+    <tr>
+      <td width="50%" class="meta" align="left">Balance Due : {{ credit_amount }}</td>
+      <td width="50%" class="meta" align="right">&nbsp;</td>
+    </tr>
+    {% endif %}
+  </table>
+
+  {% if narration %}
+  <p class="meta" style="margin-top:4px;">Narration : {{ narration }}</p>
+  {% endif %}
+
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top:20px;">
+    <tr>
+      <td width="55%" class="note" valign="bottom">Computer generated bill — signature not required.</td>
+      <td width="45%" class="meta" align="center" valign="bottom" style="border-top:1px solid #000000; padding-top:4px;">
+        Receiver's Signature
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

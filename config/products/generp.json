@@ -1,0 +1,35 @@
+{
+  "product": "generp",
+  "display_name": "GenERP",
+  "modules": ["core", "generp"],
+  "menu_mode": "complete",
+  "labels": {
+    "party": "Customer",
+    "party_plural": "Customers",
+    "party_code": "Party Code",
+    "company": "Company",
+    "deposit": "Customer Deposit"
+  },
+  "default_admin": {
+    "email": "admin@generp.example.com",
+    "username": "generp",
+    "password": "admin123",
+    "full_name": "GenERP Admin"
+  },
+  "seed_ledgers": [
+    {"system_key": "CASH", "code": "1", "name": "Cash", "group_name": "Cash-in-Hand", "ledger_type": "ASSET", "is_cash": true},
+    {"system_key": "BANK", "code": "2", "name": "Bank", "group_name": "Bank Accounts", "ledger_type": "ASSET", "is_bank": true},
+    {"system_key": "CUST-DEPOSIT", "code": "CUST-DEPOSIT", "name": "Customer Deposit / Advance", "group_name": "Current Liabilities", "ledger_type": "LIABILITY", "is_party_deposit": true},
+    {"system_key": "SALES", "code": "SALES", "name": "Sales Account", "group_name": "Sales Accounts", "ledger_type": "INCOME"},
+    {"system_key": "PURCHASE", "code": "PURCHASE", "name": "Purchase Account", "group_name": "Purchase Accounts", "ledger_type": "EXPENSE"},
+    {"system_key": "CGST_OUTPUT", "code": "CGST_OUTPUT", "name": "CGST Output", "group_name": "Duties & Taxes", "ledger_type": "LIABILITY"},
+    {"system_key": "SGST_OUTPUT", "code": "SGST_OUTPUT", "name": "SGST Output", "group_name": "Duties & Taxes", "ledger_type": "LIABILITY"},
+    {"system_key": "IGST_OUTPUT", "code": "IGST_OUTPUT", "name": "IGST Output", "group_name": "Duties & Taxes", "ledger_type": "LIABILITY"},
+    {"system_key": "CGST_INPUT", "code": "CGST_INPUT", "name": "CGST Input", "group_name": "Duties & Taxes", "ledger_type": "ASSET"},
+    {"system_key": "SGST_INPUT", "code": "SGST_INPUT", "name": "SGST Input", "group_name": "Duties & Taxes", "ledger_type": "ASSET"},
+    {"system_key": "IGST_INPUT", "code": "IGST_INPUT", "name": "IGST Input", "group_name": "Duties & Taxes", "ledger_type": "ASSET"},
+    {"system_key": "PARTY-ACCOUNT", "code": "PARTY-ACCOUNT", "name": "Party Account", "group_name": "Current Liabilities", "ledger_type": "LIABILITY"},
+    {"system_key": "CAPITAL", "code": "CAPITAL", "name": "Capital Account", "group_name": "Capital Account", "ledger_type": "LIABILITY"},
+    {"system_key": "ROUND_OFF", "code": "ROUND_OFF", "name": "Round Off", "group_name": "Indirect Expenses", "ledger_type": "EXPENSE"}
+  ]
+}
