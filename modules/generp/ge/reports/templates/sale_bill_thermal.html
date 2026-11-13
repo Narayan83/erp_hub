@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ bill_title }} - {{ bill_no }}</title>
+  <style type="text/css">
+    @page { {{ page_css }} }
+    html, body {
+      width: {{ paper_width_mm }}mm;
+      max-width: {{ paper_width_mm }}mm;
+      margin: 0 auto;
+      padding: 0;
+      height: auto;
+      font-family: "Courier New", Courier, monospace;
+      font-size: {% if bill_format == "THERMAL_58" %}9pt{% else %}10pt{% endif %};
+      font-weight: bold;
+      color: #000;
+    }
+    body.thermal-slip {
+      padding: 2mm;
+      box-sizing: border-box;
+    }
+    p { margin: 0; padding: 0; }
+    table { width: 100%; border-collapse: collapse; table-layout: auto; }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .shop { font-size: {% if bill_format == "THERMAL_58" %}12pt{% else %}14pt{% endif %}; letter-spacing: 0.5px; }
+    .title { font-size: 11pt; text-decoration: underline; margin: 2px 0 4px; }
+    .rule { border: 0; border-top: 1px dashed #000; margin: 6px 0; height: 1px; width: 100%; }
+    .rule-line { margin: 2px 0 6px; letter-spacing: 1px; font-weight: normal; }
+    .meta td { padding: 1px 0; vertical-align: top; }
+    .items th, .items td {
+      padding: 2px 1px;
+      font-size: {% if bill_format == "THERMAL_58" %}8pt{% else %}9pt{% endif %};
+      vertical-align: top;
+    }
+    .items th { border-bottom: 1px solid #000; }
+    .items tbody tr:last-child td { border-bottom: none; }
+    .tot { font-size: {% if bill_format == "THERMAL_58" %}10pt{% else %}11pt{% endif %}; }
+    .words { font-size: 8pt; font-weight: normal; margin-top: 3px; }
+    .terms { font-size: 8pt; font-weight: normal; margin-top: 6px; }
+    .thanks { font-style: italic; margin-top: 8px; font-size: 9pt; }
+  </style>
+</head>
+<body class="thermal-slip">
+  {% if company_logo_src or company_logo_url %}
+  <p class="center"><img src="{{ company_logo_src or company_logo_url }}" alt="" style="max-height:14mm;max-width:28mm;object-fit:contain;" /></p>
+  {% endif %}
+  <p class="center title">TAX INVOICE</p>
+  <p class="center shop">{{ company_name }}</p>
+  {% if company_address_lines %}
+    {% for line in company_address_lines %}
+  <p class="center">{{ line }}</p>
+    {% endfor %}
+  {% elif company_address %}
+  <p class="center">{{ company_address }}</p>
+  {% endif %}
+  {% if company_gstin %}<p class="center">GSTIN: {{ company_gstin }}</p>{% endif %}
+  {% if company_phone %}<p class="center">MOB: {{ company_phone }}</p>{% endif %}
+
+  <div class="rule"></div>
+  <table class="meta" cellspacing="0" cellpadding="0">
+    <tr>
+      <td>Invoice No: {{ bill_no }}</td>
+      <td class="right">Date: {{ bill_date_short }}</td>
+    </tr>
+    <tr>
+      <td colspan="2">Name: {{ customer_name }}</td>
+    </tr>
+    {% if customer_mobile and customer_mobile != "—" %}
+    <tr>
+      <td colspan="2">Mobile: {{ customer_mobile }}</td>
+    </tr>
+    {% endif %}
+  </table>
+  <div class="rule"></div>
+
+  <table class="items" cellspacing="0" cellpadding="0">
+    <thead>
+      <tr>
+        <th align="left" width="8%">SL</th>
+        <th align="left">PARTICULARS</th>
+        <th align="right" width="12%">QTY</th>
+        <th align="right" width="16%">RATE</th>
+        {% if bill_format != "THERMAL_58" %}
+        <th align="right" width="14%">DIS</th>
+        {% endif %}
+        <th align="right" width="18%">AMT</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in lines %}
+      <tr>
+        <td>{{ line.sr }}</td>
+        <td>{{ line.name }}</td>
+        <td align="right">{{ line.qty }}</td>
+        <td align="right">{{ line.rate }}</td>
+        {% if bill_format != "THERMAL_58" %}
+        <td align="right">{{ line.disc }}</td>
+        {% endif %}
+        <td align="right">{{ line.amount }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    </table>
+
+  <div class="rule"></div>
+  <p class="rule-line">--------------------------------</p>
+  <table class="meta tot" cellspacing="0" cellpadding="0">
+    <tr>
+      <td>Total</td>
+      <td class="right">{{ net_amount }}</td>
+    </tr>
+    {% if igst_amount != "0.00" %}
+    <tr>
+      <td>IGST</td>
+      <td class="right">{{ igst_amount }}</td>
+    </tr>
+    {% elif tax_amount != "0.00" %}
+    <tr>
+      <td>CGST : {{ cgst_amount }}</td>
+      <td class="right">SGST : {{ sgst_amount }}</td>
+    </tr>
+    {% endif %}
+  </table>
+  <p class="words">{{ amount_in_words }}</p>
+  {% if paid_amount and paid_amount != "0.00" %}
+  <p>Paid : {{ paid_amount }}{% if credit_amount != "0.00" %} &nbsp; Due : {{ credit_amount }}{% endif %}</p>
+  {% endif %}
+
+  <div class="rule"></div>
+  <div class="terms">
+    <p>* No Amount Refundable</p>
+    <p>* Goods once sold will not be taken back</p>
+    <p>* No color guarantee</p>
+  </div>
+  <p class="right" style="margin-top:10px;">for: {{ company_name }}</p>
+  <p class="center thanks">THANK YOU VISIT AGAIN</p>
+</body>
+</html>

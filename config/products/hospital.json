@@ -1,0 +1,25 @@
+{
+  "product": "hospital",
+  "display_name": "Hospital ERP",
+  "modules": ["core", "hospital"],
+  "labels": {
+    "party": "Patient",
+    "party_plural": "Patients",
+    "party_code": "Patient No",
+    "company": "Hospital",
+    "deposit": "Patient Deposit"
+  },
+  "default_admin": {
+    "email": "admin@hospital.example.com",
+    "password": "admin123",
+    "full_name": "Hospital Admin"
+  },
+  "seed_ledgers": [
+    {"system_key": "CASH", "code": "CASH", "name": "Cash", "group_name": "Cash-in-Hand", "ledger_type": "ASSET", "is_cash": true},
+    {"system_key": "BANK", "code": "BANK", "name": "Bank", "group_name": "Bank Accounts", "ledger_type": "ASSET", "is_bank": true},
+    {"system_key": "PARTY_DEPOSIT", "code": "PAT-DEPOSIT", "name": "Patient Deposit", "group_name": "Current Liabilities", "ledger_type": "LIABILITY", "is_party_deposit": true},
+    {"system_key": "PATIENT_ACCOUNT", "code": "PATIENT-ACCOUNT", "name": "Patient Account", "group_name": "Current Assets", "ledger_type": "ASSET"},
+    {"system_key": "OPD_RECEIPT", "code": "OPD-RECEIPT", "name": "OPD Receipt", "group_name": "Direct Income", "ledger_type": "INCOME"},
+    {"system_key": "IPD_RECEIPT", "code": "IPD-RECEIPT", "name": "IPD Receipt", "group_name": "Direct Income", "ledger_type": "INCOME"}
+  ]
+}

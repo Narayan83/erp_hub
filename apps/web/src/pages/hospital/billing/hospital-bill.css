@@ -1,0 +1,309 @@
+/* Match hospital desktop OPD/IPD bill density & structure */
+
+.hms-bill-page {
+  --hms-line: #94a3b8;
+  --hms-line-soft: #b8c4d4;
+  --hms-bg: #f1f5f9;
+  --hms-panel: #ffffff;
+  --hms-ink: #0f172a;
+  --hms-muted: #64748b;
+  --hms-focus: #2563eb;
+  --hms-danger: #b91c1c;
+  --hms-field-h: 28px;
+  --hms-font: 12px;
+  --hms-radius: 2px;
+
+  margin: -0.35rem -0.4rem -0.5rem;
+  min-height: calc(100vh - 0.5rem);
+  display: flex;
+  flex-direction: column;
+  background: var(--hms-bg);
+  color: var(--hms-ink);
+  font-size: var(--hms-font);
+}
+
+.hms-bill-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #e8eef6;
+  border-bottom: 1px solid var(--hms-line-soft);
+}
+
+.hms-bill-actions .hms-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid var(--hms-line);
+  border-radius: var(--hms-radius);
+  background: #fff;
+  color: var(--hms-ink);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.hms-bill-actions .hms-btn:hover {
+  background: #e8ecf3;
+  border-color: #64748b;
+}
+
+.hms-bill-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 420px minmax(0, 1fr);
+  gap: 5px;
+  padding: 4px;
+}
+
+@media (max-width: 1100px) {
+  .hms-bill-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hms-bill-left,
+.hms-bill-right {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+  background: var(--hms-panel);
+  border: 1px solid var(--hms-line-soft);
+  padding: 4px;
+}
+
+.hms-box {
+  border: 1px solid var(--hms-line);
+  border-radius: var(--hms-radius);
+  padding: 8px 6px 4px;
+  margin-top: 6px;
+  position: relative;
+}
+
+.hms-box > .hms-box-title {
+  position: absolute;
+  top: -8px;
+  left: 8px;
+  background: var(--hms-panel);
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.hms-form-row {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr);
+  gap: 8px 12px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.hms-form-row > label {
+  font-size: 12px;
+  margin: 0;
+  padding: 1px 0;
+  color: #334155;
+}
+
+.hms-pair {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.hms-pair > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.hms-field,
+.hms-bill-page select.hms-field,
+.hms-bill-page input.hms-field {
+  height: var(--hms-field-h);
+  border: 1px solid var(--hms-line);
+  border-radius: var(--hms-radius);
+  padding: 2px 6px;
+  font-size: 12px;
+  background: #fff;
+  width: 100%;
+}
+
+.hms-field:focus {
+  outline: none;
+  border-color: var(--hms-focus);
+}
+
+.hms-field[readonly] {
+  background: #f8fafc;
+}
+
+.hms-net-row,
+.hms-adv-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px;
+}
+
+.hms-net-row label {
+  font-weight: 700;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.hms-net-input {
+  flex: 1;
+  height: var(--hms-field-h);
+  border: 1px solid var(--hms-line);
+  border-radius: var(--hms-radius);
+  padding: 2px 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--hms-danger);
+  background: #fff;
+}
+
+.hms-btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  border: 1px solid var(--hms-line);
+  border-radius: var(--hms-radius);
+  background: #fff;
+  color: var(--hms-ink);
+  height: var(--hms-field-h);
+}
+
+.hms-btn:hover {
+  background: #e8ecf3;
+}
+
+.hms-btn-primary {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
+.hms-btn-primary:hover {
+  background: #1d4ed8;
+  color: #fff;
+}
+
+.hms-pay-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.hms-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  border: 1px solid var(--hms-line);
+}
+
+.hms-table th,
+.hms-table td {
+  border: 1px solid var(--hms-line-soft);
+  padding: 2px 4px;
+  vertical-align: middle;
+}
+
+.hms-table th {
+  background: #e8eef6;
+  font-weight: 600;
+  text-align: left;
+}
+
+.hms-table tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.hms-table input,
+.hms-table select {
+  height: 24px;
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 12px;
+  padding: 0 2px;
+}
+
+.hms-table input:focus,
+.hms-table select:focus {
+  border-color: var(--hms-focus);
+  background: #fff;
+  outline: none;
+}
+
+.hms-pay-foot {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 2px 2px;
+  font-size: 12px;
+}
+
+.hms-pay-foot .paid {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.hms-pay-foot .bal {
+  color: #c2410c;
+  font-weight: 600;
+}
+
+.hms-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.hms-inline-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 4px;
+}
+
+.hms-bill-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.hms-bill-footer .hint {
+  margin-left: auto;
+  color: var(--hms-muted);
+  font-size: 11px;
+}
+
+.hms-status {
+  margin-top: 2px;
+  height: 28px;
+  border: 1px solid var(--hms-line-soft);
+  border-radius: var(--hms-radius);
+  padding: 2px 8px;
+  background: #fff;
+  color: #334155;
+}
+
+.hms-scroll-table {
+  flex: 1;
+  min-height: 140px;
+  overflow: auto;
+  border: 1px solid var(--hms-line);
+}
+
+.hms-error {
+  margin: 4px 8px 0;
+  padding: 4px 8px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 12px;
+}

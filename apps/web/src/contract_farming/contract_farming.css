@@ -1,0 +1,318 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap");
+
+.cf-root {
+  --cf-ink: #1a2e1a;
+  --cf-brand: #2f6b3a;
+  --cf-brand-2: #4a8f55;
+  --cf-accent: #c4a35a;
+  --cf-paper: #f3f6f1;
+  --cf-surface: #ffffff;
+  --cf-border: #d5e0d4;
+  --cf-muted: #5a6b5a;
+  --cf-danger: #b42318;
+  --cf-credit: #1a7a3c;
+  --cf-debit: #b54708;
+  font-family: "Source Serif 4", "Libre Baskerville", Georgia, serif;
+  color: var(--cf-ink);
+  background:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(74, 143, 85, 0.12), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(196, 163, 90, 0.1), transparent),
+    var(--cf-paper);
+  min-height: 100%;
+  padding: 8px 4px 40px;
+}
+
+.cf-root h1 {
+  margin: 0 0 6px;
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--cf-ink);
+}
+
+.cf-root .hint {
+  margin: 0 0 16px;
+  color: var(--cf-muted);
+  font-family: "DM Sans", "Segoe UI", sans-serif;
+  font-size: 0.92rem;
+}
+
+.cf-root .error {
+  background: #fef3f2;
+  color: var(--cf-danger);
+  border: 1px solid #fecdca;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-family: "DM Sans", sans-serif;
+}
+
+.cf-root .ok {
+  background: #ecfdf3;
+  color: #067647;
+  border: 1px solid #abefc6;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-family: "DM Sans", sans-serif;
+}
+
+.cf-root .panel {
+  background: var(--cf-surface);
+  border: 1px solid var(--cf-border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 18px;
+  box-shadow: 0 1px 0 rgba(26, 46, 26, 0.04);
+}
+
+.cf-root .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.cf-root .grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cf-root .grid3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 900px) {
+  .cf-root .grid2,
+  .cf-root .grid3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cf-root label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--cf-muted);
+  flex: 1;
+  min-width: 140px;
+}
+
+.cf-root .input,
+.cf-root select,
+.cf-root textarea {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.92rem;
+  font-weight: 400;
+  color: var(--cf-ink);
+  border: 1px solid var(--cf-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fbfcfb;
+}
+
+.cf-root textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.cf-root .btn {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.88rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--cf-border);
+  background: #fff;
+  padding: 8px 14px;
+  cursor: pointer;
+  color: var(--cf-ink);
+}
+
+.cf-root .btn.primary {
+  background: var(--cf-brand);
+  border-color: var(--cf-brand);
+  color: #fff;
+}
+
+.cf-root .btn.primary:hover {
+  background: var(--cf-brand-2);
+}
+
+.cf-root .btn.danger {
+  color: var(--cf-danger);
+  border-color: #fecdca;
+}
+
+.cf-root .btn.ghost {
+  background: transparent;
+}
+
+.cf-root .table-wrap {
+  overflow: auto;
+  border: 1px solid var(--cf-border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.cf-root table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.88rem;
+}
+
+.cf-root th,
+.cf-root td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--cf-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.cf-root th {
+  background: #eaf1e8;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cf-muted);
+}
+
+.cf-root .row-actions {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.cf-root .badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: "DM Sans", sans-serif;
+}
+
+.cf-root .badge.credit {
+  background: #dcfae6;
+  color: var(--cf-credit);
+}
+
+.cf-root .badge.debit {
+  background: #fef0c7;
+  color: var(--cf-debit);
+}
+
+.cf-root .balance-chip {
+  font-family: "DM Sans", sans-serif;
+  background: #eef6ee;
+  border: 1px solid var(--cf-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.88rem;
+}
+
+.cf-root .balance-chip strong {
+  color: var(--cf-brand);
+}
+
+.cf-root .stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.cf-root .stat {
+  background: linear-gradient(160deg, #fff, #f4f8f3);
+  border: 1px solid var(--cf-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.cf-root .stat .label {
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.75rem;
+  color: var(--cf-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cf-root .stat .value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.cf-root .chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .cf-root .chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cf-root .chart-card h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+
+.cf-root .bar-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 70px;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.8rem;
+}
+
+.cf-root .bar-track {
+  background: #e8efe6;
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.cf-root .bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--cf-brand), var(--cf-accent));
+}
+
+.cf-root .bar-fill.alt {
+  background: linear-gradient(90deg, #b54708, #c4a35a);
+}
+
+.cf-root .partner-checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.88rem;
+}
+
+.cf-root .partner-checks label {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: var(--cf-ink);
+}
+
+.cf-root .money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

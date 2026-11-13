@@ -1,0 +1,26 @@
+{% if company_logo_src or company_logo_url %}
+<p class="header-logo" style="text-align:center;margin:2px 0;">
+  <img src="{{ company_logo_src or company_logo_url }}" alt="" style="max-height:18mm;max-width:40mm;object-fit:contain;" />
+</p>
+{% endif %}
+<p class="header-title">{{ company_name }}</p>
+{% if company_address_lines %}
+{% for line in company_address_lines %}
+<p class="header-meta">{{ line }}</p>
+{% endfor %}
+{% elif company_address %}
+<p class="header-meta">{{ company_address }}</p>
+{% endif %}
+{% if company_phone or company_email %}
+<p class="header-meta">
+  {%- if company_phone -%}Tel: {{ company_phone }}{%- endif -%}
+  {%- if company_phone and company_email %} | {% endif -%}
+  {%- if company_email -%}Email: {{ company_email }}{%- endif -%}
+</p>
+{% endif %}
+{% if company_gstin %}
+<p class="header-meta">GSTIN: {{ company_gstin }}</p>
+{% endif %}
+{% if company_website %}
+<p class="header-meta">{{ company_website }}</p>
+{% endif %}
