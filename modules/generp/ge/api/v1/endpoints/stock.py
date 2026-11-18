@@ -1,13 +1,13 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules.generp.ge.api.deps import get_current_user, get_session
 from modules.generp.ge.models.auth import User
 from modules.generp.ge.models.masters import Product
-from modules.generp.ge.models.stock import STOCK_VOUCHER_TYPES, Branch, StockMovement, StockVoucher
+from modules.generp.ge.models.stock import STOCK_VOUCHER_TYPES, Branch, LotMaster, StockMovement, StockVoucher
 from modules.generp.ge.schemas.common import MessageResponse
 from modules.generp.ge.schemas.stock import (
     BranchIn,
@@ -15,9 +15,21 @@ from modules.generp.ge.schemas.stock import (
     NextStockNoOut,
     StockBalanceOut,
     StockLedgerRow,
+    BarcodeStockReport,
+    ItemStockRow,
+    LotIn,
+    LotOut,
+    MovementStockRow,
+    StockBarcodeHit,
     StockVoucherIn,
     StockVoucherListItem,
     StockVoucherOut,
+)
+from modules.generp.ge.services.stock_barcodes import (
+    barcode_stock_report,
+    item_stock_report,
+    lookup_barcode,
+    movement_stock_report,
 )
 from modules.generp.ge.services.stock_posting import (
     cancel_stock_voucher,
@@ -275,3 +287,155 @@ async def stock_balances(
         )
         for p in products
     ]
+
+
+def _lot_out(row: LotMaster) -> LotOut:
+    return LotOut(
+        id=row.id,
+        code=row.code,
+        name=row.name,
+        remarks=row.remarks,
+        is_active=bool(row.is_active),
+    )
+
+
+@router.get("/lots", response_model=list[LotOut])
+async def list_lots(
+    _u: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    rows = (
+        await session.execute(select(LotMaster).order_by(LotMaster.code))
+    ).scalars().all()
+    return [_lot_out(r) for r in rows]
+
+
+@router.post("/lots", response_model=LotOut)
+async def create_lot(
+    data: LotIn,
+    _u: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    code = data.code.strip().upper()
+    if not code or not data.name.strip():
+        raise HTTPException(status_code=400, detail="Lot code and name are required.")
+    exists = (
+        await session.execute(select(LotMaster).where(LotMaster.code == code))
+    ).scalar_one_or_none()
+    if exists:
+        raise HTTPException(status_code=400, detail="Lot code already exists.")
+    row = LotMaster(
+        code=code,
+        name=data.name.strip(),
+        remarks=(data.remarks or "").strip() or None,
+        is_active=data.is_active,
+    )
+    session.add(row)
+    await session.flush()
+    return _lot_out(row)
+
+
+@router.put("/lots/{lot_id}", response_model=LotOut)
+async def update_lot(
+    lot_id: str,
+    data: LotIn,
+    _u: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    row = (
+        await session.execute(select(LotMaster).where(LotMaster.id == lot_id))
+    ).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Lot not found")
+    code = data.code.strip().upper()
+    if not code or not data.name.strip():
+        raise HTTPException(status_code=400, detail="Lot code and name are required.")
+    clash = (
+        await session.execute(
+            select(LotMaster).where(LotMaster.code == code, LotMaster.id != lot_id)
+        )
+    ).scalar_one_or_none()
+    if clash:
+        raise HTTPException(status_code=400, detail="Lot code already exists.")
+    row.code = code
+    row.name = data.name.strip()
+    row.remarks = (data.remarks or "").strip() or None
+    row.is_active = data.is_active
+    await session.flush()
+    return _lot_out(row)
+
+
+@router.delete("/lots/{lot_id}", response_model=MessageResponse)
+async def delete_lot(
+    lot_id: str,
+    _u: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    row = (
+        await session.execute(select(LotMaster).where(LotMaster.id == lot_id))
+    ).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Lot not found")
+    await session.delete(row)
+    await session.flush()
+    return MessageResponse(message="Lot deleted")
+
+
+@router.get("/barcodes/lookup", response_model=StockBarcodeHit)
+async def barcode_lookup(
+    q: str = Query(..., min_length=1),
+    _u: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    hit = await lookup_barcode(session, q)
+    if not hit:
+        raise HTTPException(status_code=404, detail="Barcode not found")
+    return hit
+
+
+@router.get("/reports/barcode-stock", response_model=BarcodeStockReport)
+async def report_barcode_stock(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    status: str = "not_sold",
+    barcode: str | None = None,
+    hide_sale_rates: bool = False,
+    _u: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    return await barcode_stock_report(
+        session,
+        date_from=date_from,
+        date_to=date_to,
+        status=status,
+        barcode=barcode,
+        hide_sale_rates=hide_sale_rates,
+    )
+
+
+@router.get("/reports/item-stock", response_model=list[ItemStockRow])
+async def report_item_stock(
+    product_id: str | None = None,
+    q: str | None = None,
+    _u: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    return await item_stock_report(session, product_id=product_id, q=q)
+
+
+@router.get("/reports/movement-stock", response_model=list[MovementStockRow])
+async def report_movement_stock(
+    supplier_id: str | None = None,
+    product_id: str | None = None,
+    lot_id: str | None = None,
+    barcode: str | None = None,
+    _u: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    return await movement_stock_report(
+        session,
+        supplier_id=supplier_id,
+        product_id=product_id,
+        lot_id=lot_id,
+        barcode=barcode,
+    )

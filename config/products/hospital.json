@@ -11,6 +11,7 @@
   },
   "default_admin": {
     "email": "admin@hospital.example.com",
+    "username": "hospital",
     "password": "admin123",
     "full_name": "Hospital Admin"
   },

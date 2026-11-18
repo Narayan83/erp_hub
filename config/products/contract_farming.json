@@ -12,7 +12,7 @@
   },
   "default_admin": {
     "email": "admin@contract_farming.example.com",
-    "username": "cfadmin",
+    "username": "contract_farming",
     "password": "admin123",
     "full_name": "Contract Farming Admin"
   },

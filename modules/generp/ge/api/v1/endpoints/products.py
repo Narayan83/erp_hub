@@ -114,6 +114,8 @@ def _to_out(obj: Product) -> ProductOut:
         is_active=obj.is_active,
         is_in_shop=bool(getattr(obj, "is_in_shop", False)),
         own_barcode=bool(getattr(obj, "own_barcode", False)),
+        multi_barcode=bool(getattr(obj, "multi_barcode", False)),
+        barcode_piece_qty=float(getattr(obj, "barcode_piece_qty", 1) or 1),
         category_name=obj.category.name if obj.category else None,
         sub_category_name=obj.sub_category.name if obj.sub_category else None,
         gst_name=obj.gst.name if obj.gst else None,
@@ -449,6 +451,8 @@ async def generate_variants(
             is_active=True,
             is_in_shop=bool(getattr(parent, "is_in_shop", False)),
             own_barcode=bool(getattr(parent, "own_barcode", False)),
+            multi_barcode=bool(getattr(parent, "multi_barcode", False)),
+            barcode_piece_qty=float(getattr(parent, "barcode_piece_qty", 1) or 1),
         )
         session.add(obj)
         # Flush each variant so next_product_code sees the new max code.
@@ -498,6 +502,9 @@ async def create_product(
     payload["current_stock"] = payload.get("opening_stock", 0)
     payload["tax_slabs"] = normalize_slabs(payload.get("tax_slabs")) or None
     payload["own_barcode"] = bool(data.own_barcode)
+    payload["multi_barcode"] = bool(data.multi_barcode)
+    pieces = float(data.barcode_piece_qty or 1)
+    payload["barcode_piece_qty"] = pieces if pieces > 0 else 1
     obj = Product(**payload)
     session.add(obj)
     await session.flush()
@@ -534,6 +541,10 @@ async def update_product(
     if not obj:
         raise HTTPException(status_code=404, detail="Not found")
     updates = data.model_dump(exclude_unset=True)
+    if "barcode_piece_qty" in updates and float(updates.get("barcode_piece_qty") or 0) <= 0:
+        updates["barcode_piece_qty"] = 1
+    if "multi_barcode" in updates:
+        updates["multi_barcode"] = bool(updates["multi_barcode"])
     if "tax_slabs" in updates:
         updates["tax_slabs"] = normalize_slabs(updates.get("tax_slabs")) or None
     for k, v in updates.items():

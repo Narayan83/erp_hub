@@ -67,11 +67,17 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   overflow: auto;
   background: var(--hms-panel);
   border: 1px solid var(--hms-line-soft);
   padding: 4px;
+}
+
+.hms-scroll-table-10 thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .hms-box {
@@ -173,10 +179,18 @@
   background: #fff;
   color: var(--hms-ink);
   height: var(--hms-field-h);
+  white-space: nowrap;
 }
 
 .hms-btn:hover {
   background: #e8ecf3;
+}
+
+.hms-btn-sm {
+  font-size: 10px;
+  padding: 2px 6px;
+  height: 24px;
+  line-height: 1.1;
 }
 
 .hms-btn-primary {
@@ -229,6 +243,24 @@
   background: transparent;
   font-size: 12px;
   padding: 0 2px;
+}
+
+/* Compact catalog / bill-line grids: ~7 visible rows, rest scroll */
+.hms-table-compact {
+  font-size: 11px;
+}
+
+.hms-table-compact th,
+.hms-table-compact td {
+  padding: 0 3px;
+  line-height: 1.15;
+  height: 20px;
+}
+
+.hms-table-compact input,
+.hms-table-compact select {
+  height: 18px;
+  font-size: 11px;
 }
 
 .hms-table input:focus,
@@ -297,6 +329,115 @@
   min-height: 140px;
   overflow: auto;
   border: 1px solid var(--hms-line);
+}
+
+/* Fixed viewport for service picker / lines (default ~7 rows; height may be set inline) */
+.hms-scroll-table-10 {
+  flex: 0 0 auto;
+  min-height: 0;
+  height: calc(20px + 7 * 20px);
+  max-height: calc(20px + 7 * 20px);
+  overflow: auto;
+  border: 1px solid var(--hms-line);
+}
+
+.hms-resizable-table {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.hms-table-resize-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 12px;
+  margin: 0 0 2px;
+  cursor: ns-resize;
+  color: #64748b;
+  user-select: none;
+  touch-action: none;
+  border: 1px solid transparent;
+  border-top: none;
+  background: linear-gradient(180deg, #eef2f7 0%, #e2e8f0 100%);
+}
+
+.hms-table-resize-handle:hover,
+.hms-table-resize-handle:active {
+  color: #2563eb;
+  background: linear-gradient(180deg, #e0e7ff 0%, #dbeafe 100%);
+}
+
+.hms-table-resize-icon {
+  display: inline-flex;
+  line-height: 0;
+}
+
+.hms-search-field {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: 1 1 auto;
+  min-width: 160px;
+  max-width: 320px;
+  border: 1px solid var(--hms-line);
+  border-radius: var(--hms-radius);
+  background: #fff;
+  height: var(--hms-field-h);
+  overflow: hidden;
+}
+
+.hms-search-field:focus-within {
+  border-color: var(--hms-focus);
+}
+
+.hms-search-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  padding: 0;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.hms-search-icon-btn:hover:not(:disabled) {
+  color: #2563eb;
+}
+
+.hms-search-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hms-search-field .hms-field {
+  border: none !important;
+  height: 100% !important;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 0;
+}
+
+.hms-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 4px;
+  flex-wrap: nowrap;
+}
+
+.hms-filter-bar .hms-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.hms-filter-bar .hms-doctor-field {
+  flex: 1 1 220px;
+  max-width: 280px;
 }
 
 .hms-error {

@@ -165,15 +165,20 @@ class ClearTablesResponse(BaseModel):
     message: str
 
 
-async def _list_public_tables(session: AsyncSession) -> list[str]:
+async def _list_app_tables(session: AsyncSession) -> list[tuple[str, str]]:
+    """Return (schema, table_name) for core + hospital schemas."""
     result = await session.execute(
         text(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema = 'public' AND table_type = 'BASE TABLE' "
-            "ORDER BY table_name"
+            "SELECT table_schema, table_name FROM information_schema.tables "
+            "WHERE table_schema IN ('core', 'hospital') AND table_type = 'BASE TABLE' "
+            "ORDER BY table_schema, table_name"
         )
     )
-    return [row[0] for row in result.fetchall()]
+    return [(row[0], row[1]) for row in result.fetchall()]
+
+
+def _qualified(schema: str, name: str) -> str:
+    return f'"{schema}"."{name}"'
 
 
 @router.get("/db-tables", response_model=list[TableInfo])
@@ -182,16 +187,16 @@ async def list_db_tables(
     _: User = Depends(require_admin),
 ) -> list[TableInfo]:
     """List every table with its current row count and a suggested selection."""
-    tables = await _list_public_tables(session)
+    tables = await _list_app_tables(session)
     out: list[TableInfo] = []
-    for name in tables:
+    for schema, name in tables:
         protected = name in PROTECTED_TABLES
         if protected:
             group, default_selected = "Protected", False
         else:
             group, default_selected = TABLE_CLASSIFICATION.get(name, ("Other", False))
         try:
-            count_result = await session.execute(text(f'SELECT COUNT(*) FROM "{name}"'))
+            count_result = await session.execute(text(f"SELECT COUNT(*) FROM {_qualified(schema, name)}"))
             row_count = int(count_result.scalar() or 0)
         except Exception:
             row_count = -1
@@ -235,7 +240,9 @@ async def clear_tables(
             detail="Select at least one table to clear.",
         )
 
-    existing = set(await _list_public_tables(session))
+    app_tables = await _list_app_tables(session)
+    by_name = {name: schema for schema, name in app_tables}
+    existing = set(by_name)
     unknown = requested - existing
     if unknown:
         raise HTTPException(
@@ -254,12 +261,13 @@ async def clear_tables(
     total_rows = 0
     for name in to_clear:
         try:
-            count_result = await session.execute(text(f'SELECT COUNT(*) FROM "{name}"'))
+            q = _qualified(by_name[name], name)
+            count_result = await session.execute(text(f"SELECT COUNT(*) FROM {q}"))
             total_rows += int(count_result.scalar() or 0)
         except Exception:
             pass
 
-    table_list = ", ".join(f'"{name}"' for name in to_clear)
+    table_list = ", ".join(_qualified(by_name[name], name) for name in to_clear)
     try:
         await session.execute(text(f"TRUNCATE TABLE {table_list} RESTART IDENTITY"))
         await session.commit()

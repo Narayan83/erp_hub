@@ -39,6 +39,7 @@ import type {
   GstRate,
   Party,
   PaymentMode,
+  Lot,
   Product,
   PurchaseImportPreview,
   Voucher,
@@ -52,10 +53,25 @@ type PendingPurchase = {
   party_bill_no?: string | null
 }
 
-const ITEM_COLS_FULL = ['#', 'Code', 'Product', 'Qty', 'Rate', 'Profit %', 'Sale Price', 'MRP', 'Disc%', 'GST%', 'Taxable', 'GST', 'Amount'] as const
-const ITEM_COLS_QTY = ['#', 'Code', 'Product', 'Qty'] as const
 const TEMPLATE_HEADERS = ['Code', 'Product', 'Qty', 'Rate', 'Profit %', 'Sale Price', 'MRP', 'Disc%', 'GST%']
 const REPORT_CODE = 'PURCHASE_BILL'
+
+function barcodePlan(it: BillLine, unique: boolean): string {
+  if (!unique) return ''
+  if (it.barcode_from) {
+    if (!it.barcode_to || it.barcode_from === it.barcode_to) {
+      const copies = Number(it.print_copies || 1)
+      return copies > 1 ? `${it.barcode_from} × ${copies}` : String(it.barcode_from)
+    }
+    return `${it.barcode_from}–${it.barcode_to}`
+  }
+  if (it.multi_barcode) {
+    const pieces = Number(it.pieces_per_barcode || 1) || 1
+    const copies = Math.max(1, Math.ceil(Number(it.qty || 0) / pieces))
+    return `1 barcode × ${copies}`
+  }
+  return `${Math.max(1, Math.ceil(Number(it.qty || 0)))} unique`
+}
 
 function fallbackBillHtml(voucher: Voucher): string {
   const lines = (voucher.items || [])
@@ -166,6 +182,10 @@ export function PurchaseBillPage({
   const [gstById, setGstById] = useState<Record<string, GstRate>>({})
   const [vendors, setVendors] = useState<Party[]>([])
   const [paymentModes, setPaymentModes] = useState<PaymentMode[]>([])
+  const [lotEnabled, setLotEnabled] = useState(false)
+  const [uniqueBarcode, setUniqueBarcode] = useState(false)
+  const [lots, setLots] = useState<Lot[]>([])
+  const [lotIn, setLotIn] = useState('')
 
   const [billNo, setBillNo] = useState('—')
   const [lastNo, setLastNo] = useState('Assigned when you save')
@@ -287,6 +307,15 @@ export function PurchaseBillPage({
       setPaymentModes(modes)
       const parking = profile?.purchase_bill_parking === true
       setParkingEnabled(parking)
+      const lotsOn = profile?.lot_enabled === true
+      setLotEnabled(lotsOn)
+      setUniqueBarcode(profile?.unique_barcode_stock === true)
+      if (lotsOn) {
+        const lotRows = await api.get<Lot[]>('/stock/lots').catch(() => [] as Lot[])
+        setLots(lotRows.filter((l) => l.is_active !== false))
+      } else {
+        setLots([])
+      }
       const raw = String(profile?.purchase_tax_mode || 'exclusive')
       setTaxInclusive(raw.toLowerCase() === 'inclusive')
       if (parking) {
@@ -382,6 +411,20 @@ export function PurchaseBillPage({
   const balance = round2(netTotal - paidTotal)
   const payable = round2(netTotal + oldBalance)
 
+  const stockFields = useCallback(
+    (product: Product) => {
+      const lot = lots.find((l) => l.id === lotIn)
+      return {
+        hsn_code: product.hsn_code || '',
+        lot_id: lot?.id || null,
+        lot_name: lot ? `${lot.code} ${lot.name}`.trim() : '',
+        multi_barcode: product.multi_barcode === true,
+        pieces_per_barcode: Number(product.barcode_piece_qty || 1) || 1,
+      }
+    },
+    [lots, lotIn],
+  )
+
   const resolveEntry = useCallback(
     async (text?: string, after: 'name' | 'qty' | 'add' = 'name') => {
       const raw = (text ?? entryText).trim()
@@ -420,6 +463,7 @@ export function PurchaseBillPage({
             gst_id: gstHit.gst_id,
             gst_rate: gstHit.gst_rate,
             tax_slabs: product.tax_slabs || null,
+            ...stockFields(product),
           },
         ])
         setCurrentProduct(null)
@@ -444,7 +488,7 @@ export function PurchaseBillPage({
         addLine()
       })
     },
-    [entryText, billDiscPct, gstById, productRate, qtyOnlyMode, pricesFromProduct],
+    [entryText, billDiscPct, gstById, productRate, qtyOnlyMode, pricesFromProduct, stockFields],
   )
 
   const setEntryFieldsEnabled = currentProduct !== null && entryName !== '—'
@@ -491,10 +535,11 @@ export function PurchaseBillPage({
         gst_id: gstHit.gst_id,
         gst_rate: gstHit.gst_rate,
         tax_slabs: product.tax_slabs || null,
+        ...stockFields(product),
       },
     ])
     resetEntry()
-  }, [currentProduct, entryName, resolveEntry, qtyIn, rateIn, discIn, gstById, resetEntry, qtyOnlyMode, pricesFromProduct])
+  }, [currentProduct, entryName, resolveEntry, qtyIn, rateIn, discIn, gstById, resetEntry, qtyOnlyMode, pricesFromProduct, stockFields])
 
   const applyBillDiscount = (pct: number) => {
     setBillDiscPct(pct)
@@ -701,6 +746,7 @@ export function PurchaseBillPage({
         mrp: Number(it.mrp || 0) || null,
         sale_price: Number(it.sale_price || 0) || null,
         profit_pct: Number(it.profit_pct || 0) || null,
+        lot_id: it.lot_id || null,
       })),
       payments: isParked
         ? []
@@ -733,9 +779,28 @@ export function PurchaseBillPage({
       setJustSaved(true)
       setLoadedParked(false)
       setCheckedRows(Object.fromEntries(items.map((_, i) => [i, true])))
+      const savedLines = result.items || []
+      setItems((prev) =>
+        prev.map((it, i) => {
+          const saved = savedLines[i]
+          if (!saved) return it
+          return {
+            ...it,
+            hsn_code: saved.hsn_code || it.hsn_code,
+            lot_id: saved.lot_id || it.lot_id,
+            lot_name: saved.lot_name || it.lot_name,
+            barcode_from: saved.barcode_from || null,
+            barcode_to: saved.barcode_to || null,
+            print_copies: Number(saved.print_copies || 0),
+            barcodes: saved.barcodes || [],
+          }
+        }),
+      )
       if (voucherId) await openPrintPreview(voucherId, voucherNo, result)
+      const codes = savedLines.flatMap((it) => (it.barcodes || []).map((b) => Number(b.barcode))).filter((n) => Number.isFinite(n))
+      const range = codes.length ? `\nBarcodes ${Math.min(...codes)} to ${Math.max(...codes)}` : ''
       alert(
-        `Bill ${voucherNo} saved.\nNet: ${fmt(Number(result.net_amount || 0))}\nSelect items and Generate barcode, or print from the preview.`,
+        `Bill ${voucherNo} saved.\nNet: ${fmt(Number(result.net_amount || 0))}${range}\nSelect items and Generate barcode, or print from the preview.`,
       )
     } catch (err) {
       alert(err instanceof ApiError ? err.message : 'Save failed')
@@ -885,6 +950,13 @@ export function PurchaseBillPage({
           disc_pct: discPct,
           gst_id: it.gst_id,
           gst_rate: Number(it.gst_rate || 0),
+          hsn_code: it.hsn_code || '',
+          lot_id: it.lot_id || null,
+          lot_name: it.lot_name || '',
+          barcode_from: it.barcode_from || null,
+          barcode_to: it.barcode_to || null,
+          print_copies: Number(it.print_copies || 0),
+          barcodes: it.barcodes || [],
         })
       }
       setItems(loaded)
@@ -1019,6 +1091,24 @@ export function PurchaseBillPage({
       alert('Select at least one item.')
       return
     }
+    if (uniqueBarcode) {
+      const issued = rows.flatMap((it) =>
+        (it.barcodes || []).map((b) => ({
+          product_id: it.product_id,
+          qty: Math.max(1, Number(b.print_copies || 1)),
+          barcode: b.barcode,
+          name: it.name,
+          code: it.code,
+        })),
+      )
+      if (!issued.length) {
+        alert('Save the purchase first. Unique barcodes are created when the bill is saved.')
+        return
+      }
+      saveBarcodeBatch({ items: issued })
+      openOverlay('barcode_generation', 'Barcode Generation', '?tab=batch')
+      return
+    }
     saveBarcodeBatch({
       items: rows.map((it) => ({
         product_id: it.product_id,
@@ -1038,6 +1128,35 @@ export function PurchaseBillPage({
       alert(err instanceof ApiError ? err.message : 'Failed to load parked purchase')
     }
   }
+
+  const gridCols = qtyOnlyMode
+    ? ['#', 'Code', 'Product', ...(lotEnabled ? ['Lot'] : []), 'Qty']
+    : [
+        '#',
+        'Code',
+        'Product',
+        ...(lotEnabled ? ['Lot'] : []),
+        'HSN',
+        'Qty',
+        'Rate',
+        'Cost',
+        'Profit %',
+        'Sale Price',
+        'MRP',
+        'Disc%',
+        'GST%',
+        'Taxable',
+        'GST',
+        'Amount',
+        ...(uniqueBarcode ? ['Barcode'] : []),
+      ]
+  const barcodeNums = uniqueBarcode
+    ? items
+        .flatMap((it) => (it.barcodes || []).map((b) => Number(b.barcode)))
+        .filter((n) => Number.isFinite(n))
+    : []
+  const barcodeStart = barcodeNums.length ? Math.min(...barcodeNums) : null
+  const barcodeEnd = barcodeNums.length ? Math.max(...barcodeNums) : null
 
   return (
     <div className={embeddedModify ? 'sale-bill' : 'sale-bill sale-bill-screen'}>
@@ -1259,6 +1378,19 @@ export function PurchaseBillPage({
       </div>
 
       <div className="sb-entry">
+        {lotEnabled ? (
+          <>
+            <span className="field-label">Lot</span>
+            <select className="input" style={{ maxWidth: 160 }} value={lotIn} onChange={(e) => setLotIn(e.target.value)}>
+              <option value="">—</option>
+              {lots.map((lot) => (
+                <option key={lot.id} value={lot.id}>
+                  {lot.code} {lot.name}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : null}
         <span className="field-label">Barcode / Item</span>
         <Typeahead
           inputRef={entryRef}
@@ -1399,7 +1531,7 @@ export function PurchaseBillPage({
                       />
                     </th>
                   ) : null}
-                  {(qtyOnlyMode ? ITEM_COLS_QTY : ITEM_COLS_FULL).map((c) => (
+                  {gridCols.map((c) => (
                     <th key={c} className={c === 'Code' ? 'sb-col-code' : c === 'Product' ? 'sb-col-name' : undefined}>
                       {c}
                     </th>
@@ -1427,6 +1559,36 @@ export function PurchaseBillPage({
                     <td>{r + 1}</td>
                     <td className="sb-col-code">{row.it.code}</td>
                     <td className="sb-col-name">{row.it.name}</td>
+                    {lotEnabled ? (
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <select
+                          className="input"
+                          value={row.it.lot_id || ''}
+                          onChange={(e) => {
+                            const lot = lots.find((l) => l.id === e.target.value)
+                            setItems((prev) =>
+                              prev.map((it, i) =>
+                                i === r
+                                  ? {
+                                      ...it,
+                                      lot_id: lot?.id || null,
+                                      lot_name: lot ? `${lot.code} ${lot.name}`.trim() : '',
+                                    }
+                                  : it,
+                              ),
+                            )
+                          }}
+                        >
+                          <option value="">—</option>
+                          {lots.map((lot) => (
+                            <option key={lot.id} value={lot.id}>
+                              {lot.code}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    ) : null}
+                    {!qtyOnlyMode ? <td>{row.it.hsn_code || ''}</td> : null}
                     <td>
                       <EditableNum
                         value={row.it.qty}
@@ -1442,6 +1604,7 @@ export function PurchaseBillPage({
                         onCommit={(n) => updateLine(r, 'rate', String(n))}
                       />
                     </td>
+                    <td className="num">{fmt(row.it.rate * (1 - Number(row.it.disc_pct || 0) / 100))}</td>
                     <td>
                       <EditableNum
                         value={Number(row.it.profit_pct || 0)}
@@ -1476,6 +1639,7 @@ export function PurchaseBillPage({
                         onCommit={(n) => updateLine(r, 'amount', String(n))}
                       />
                     </td>
+                    {uniqueBarcode ? <td>{barcodePlan(row.it, true)}</td> : null}
                       </>
                     ) : null}
                   </tr>
@@ -1504,6 +1668,11 @@ export function PurchaseBillPage({
               ) : null}
             </div>
             <div className="sb-totals-chips">
+              {barcodeStart != null ? (
+                <span className="sb-chip">
+                  Start {barcodeStart} · End {barcodeEnd}
+                </span>
+              ) : null}
               <span className="sb-chip info">{outstanding}</span>
               <span className="sb-chip">Gross: {fmt(taxableTotal)}</span>
               <span className="sb-chip">Tax: {fmt(taxTotal)}</span>

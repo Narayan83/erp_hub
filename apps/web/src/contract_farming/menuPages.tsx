@@ -13,6 +13,7 @@ import {
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ChartsPage, LedgerReportPage, SummaryReportPage } from './pages/ReportsPage'
 import { TransactionsPage } from './pages/TransactionsPage'
+import { UsersPage } from './pages/UsersPage'
 
 const PAGES: Record<string, () => ReactNode> = {
   dashboard: () => <DashboardPage />,
@@ -29,6 +30,7 @@ const PAGES: Record<string, () => ReactNode> = {
   cf_report_summary: () => <SummaryReportPage />,
   cf_report_ledger: () => <LedgerReportPage />,
   cf_report_charts: () => <ChartsPage />,
+  user_addition_modification: () => <UsersPage />,
 }
 
 export function renderContractFarmingMenuPage(raw: string): ReactNode | null {

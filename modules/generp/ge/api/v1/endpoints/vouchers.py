@@ -25,18 +25,30 @@ from modules.generp.ge.services.posting import (
     peek_next_voucher_no,
     update_voucher,
 )
+from modules.generp.ge.models.stock import LotMaster
 from modules.generp.ge.services.purchase_import import preview_purchase_import
+from modules.generp.ge.services.stock_barcodes import summaries_for_voucher
 
 router = APIRouter()
 
 
-def _to_out(v: Voucher) -> VoucherOut:
+async def _to_out(session: AsyncSession, v: Voucher) -> VoucherOut:
     paid = sum(
         float(p.amount or 0)
         for p in (v.payments or [])
         if not (p.payment_mode and p.payment_mode.is_credit)
     )
     net = float(v.net_amount or 0)
+    summaries = await summaries_for_voucher(session, v.id)
+    lot_ids = [it.lot_id for it in v.items if getattr(it, "lot_id", None)]
+    lots: dict[str, LotMaster] = {}
+    if lot_ids:
+        lots = {
+            lot.id: lot
+            for lot in (
+                await session.execute(select(LotMaster).where(LotMaster.id.in_(lot_ids)))
+            ).scalars().all()
+        }
     return VoucherOut(
         id=v.id,
         voucher_type=v.voucher_type,
@@ -89,6 +101,15 @@ def _to_out(v: Voucher) -> VoucherOut:
                 if it.product
                 else 0,
                 "profit_pct": float(getattr(it, "profit_pct", 0) or 0),
+                "hsn_code": it.product.hsn_code if it.product else None,
+                "lot_id": getattr(it, "lot_id", None),
+                "lot_name": (
+                    f"{lots[it.lot_id].code} {lots[it.lot_id].name}".strip()
+                    if getattr(it, "lot_id", None) and it.lot_id in lots
+                    else None
+                ),
+                "stock_barcode_id": getattr(it, "stock_barcode_id", None),
+                **(summaries.get(it.id) or {}),
             }
             for it in sorted(v.items, key=lambda x: x.sort_order)
         ],
@@ -277,7 +298,7 @@ async def get_voucher_by_no(
     loaded = await load_voucher(session, v.id)
     if not loaded:
         raise HTTPException(status_code=404, detail="Not found")
-    return _to_out(loaded)
+    return await _to_out(session, loaded)
 
 
 @router.get("/{voucher_id}", response_model=VoucherOut)
@@ -287,7 +308,7 @@ async def get_voucher(
     v = await load_voucher(session, voucher_id)
     if not v:
         raise HTTPException(status_code=404, detail="Not found")
-    return _to_out(v)
+    return await _to_out(session, v)
 
 
 @router.post("", response_model=VoucherOut)
@@ -298,7 +319,7 @@ async def create(
 ):
     voucher = await create_voucher(session, data, user.id)
     v = await load_voucher(session, voucher.id)
-    return _to_out(v)
+    return await _to_out(session, v)
 
 
 @router.put("/{voucher_id}", response_model=VoucherOut)
@@ -310,7 +331,7 @@ async def update(
 ):
     voucher = await update_voucher(session, voucher_id, data, user.id)
     v = await load_voucher(session, voucher.id)
-    return _to_out(v)
+    return await _to_out(session, v)
 
 
 @router.delete("/{voucher_id}", response_model=MessageResponse)

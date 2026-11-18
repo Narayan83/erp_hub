@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules.kramcop.kc.models.auth import User
@@ -111,8 +111,19 @@ async def seed_roles(session: AsyncSession) -> None:
                 if key in clerk_keys
             ],
         )
-    admin_user = (await session.execute(select(User).where(User.username == "admin"))).scalar_one_or_none()
-    if admin_user:
+    from erp_core.product_config import load_product_config
+
+    admin_cfg = load_product_config().get("default_admin") or {}
+    wanted_names = {
+        str(admin_cfg.get("username") or "").strip().lower(),
+        "admin",
+        "kramcop",
+    }
+    wanted_names.discard("")
+    admin_users = (
+        await session.execute(select(User).where(func.lower(User.username).in_(wanted_names)))
+    ).scalars().all()
+    for admin_user in admin_users:
         mapped = await user_role_ids(session, admin_user.id)
         if not mapped:
-            session.add(UserRole(user_id=admin_user.id, role_id=existing.id))
+            session.add(UserRole(user_id=str(admin_user.id), role_id=existing.id))

@@ -20,6 +20,14 @@ from modules.generp.ge.schemas.transactions import VoucherIn
 from modules.generp.ge.services.cashbook_posting import CashbookPostingService
 from modules.generp.ge.services.document_numbers import next_document_no, peek_document_no
 from modules.generp.ge.services.ledger_codes import ledger_by_key
+from modules.generp.ge.services.stock_barcodes import (
+    consume_purchase_return,
+    consume_sale_barcodes,
+    issue_purchase_barcodes,
+    release_purchase_barcodes,
+    restore_sale_barcodes,
+    reverse_barcode_moves,
+)
 from modules.generp.ge.services.stock_lots import add_lot, consume_fifo, peek_fifo, restore_fifo, reverse_source_lots
 from modules.generp.ge.services.stock_guard import assert_stock_available, lock_products
 from modules.generp.ge.services.sale_pricing import SALE_RATE_FIFO, company_sale_rate_source
@@ -205,25 +213,27 @@ async def _add_item_line(
         gst_rate=gst_rate,
         inclusive=inclusive,
     )
-    session.add(
-        VoucherItem(
-            voucher_id=voucher.id,
-            product_id=item.product_id,
-            description=item.description,
-            quantity=qty,
-            rate=rate,
-            discount_amount=line_disc,
-            gst_id=gst_id,
-            gst_rate=gst_rate,
-            gst_amount=gst_amount,
-            taxable_amount=taxable,
-            amount=amount,
-            mrp=mrp,
-            sale_price=sale_price,
-            profit_pct=profit_pct,
-            sort_order=idx,
-        )
+    line = VoucherItem(
+        voucher_id=voucher.id,
+        product_id=item.product_id,
+        description=item.description,
+        quantity=qty,
+        rate=rate,
+        discount_amount=line_disc,
+        gst_id=gst_id,
+        gst_rate=gst_rate,
+        gst_amount=gst_amount,
+        taxable_amount=taxable,
+        amount=amount,
+        mrp=mrp,
+        sale_price=sale_price,
+        profit_pct=profit_pct,
+        lot_id=getattr(item, "lot_id", None) or None,
+        stock_barcode_id=getattr(item, "stock_barcode_id", None) or None,
+        sort_order=idx,
     )
+    session.add(line)
+    await session.flush()
     if product:
         if post_stock and (voucher_type in RETAIL_SALE_TYPES or voucher_type == "PURCHASE_RETURN"):
             await assert_stock_available(session, product, qty)
@@ -280,6 +290,14 @@ async def _add_item_line(
                 )
             elif voucher_type == "PURCHASE_RETURN":
                 await consume_fifo(session, product.id, qty)
+        if post_stock and voucher_type == "PURCHASE":
+            await issue_purchase_barcodes(session, voucher, line, product)
+        elif post_stock and voucher_type in RETAIL_SALE_TYPES:
+            await consume_sale_barcodes(session, voucher, line, product, qty)
+        elif post_stock and voucher_type == "SALE_RETURN":
+            await restore_sale_barcodes(session, voucher, line, product, qty)
+        elif post_stock and voucher_type == "PURCHASE_RETURN":
+            await consume_purchase_return(session, voucher, line, product, qty)
     return qty * rate, taxable, gst_amount
 
 
@@ -587,6 +605,7 @@ async def update_voucher(
         if not was_parked:
             await _unpost_purchase_stock(session, voucher)
     else:
+        await reverse_barcode_moves(session, voucher_id=voucher.id)
         for item in voucher.items:
             if item.product_id:
                 product = (
@@ -952,6 +971,7 @@ def dump_voucher_trace(v: Voucher) -> dict:
 
 
 async def _unpost_purchase_stock(session: AsyncSession, voucher: Voucher) -> None:
+    await release_purchase_barcodes(session, voucher.id)
     for item in voucher.items or []:
         if not item.product_id:
             continue

@@ -88,7 +88,7 @@ class AppDataService:
                     [
                         "id", "code", "barcode", "name", "category_id", "sub_category_id", "gst_id",
                         "tax_slabs", "unit", "hsn_code", "purchase_price", "sale_price", "wholesale_price",
-                        "mrp", "current_stock", "own_barcode",
+                        "mrp", "current_stock", "own_barcode", "multi_barcode", "barcode_piece_qty",
                     ],
                 )
                 for x in products
@@ -108,6 +108,7 @@ class AppDataService:
                     "address_line4", "city", "state", "pin_code", "phone", "mobile", "email",
                     "website", "gstin", "sale_tax_mode", "wholesale_tax_mode", "purchase_tax_mode",
                     "sale_rate_source", "allow_negative_stock", "purchase_bill_parking",
+                    "unique_barcode_stock", "lot_enabled",
                 ],
             ) if profile else {},
         }

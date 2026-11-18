@@ -41,9 +41,11 @@ def resolve_config_file() -> Path | None:
             return path
     root = resolve_app_root()
     if root is not None:
-        candidate = root / "config" / "kramcop.env"
-        if candidate.is_file():
-            return candidate
+        product = (os.environ.get("ERP_PRODUCT") or "hospital").strip().lower()
+        for name in (f"{product}.env", "kramcop.env"):
+            candidate = root / "config" / name
+            if candidate.is_file():
+                return candidate
     return None
 
 
@@ -104,13 +106,21 @@ def resolve_web_dist() -> Path | None:
     return None
 
 
-def apply_env_file(path: Path) -> None:
-    """Load KEY=VALUE lines into os.environ (does not override existing)."""
+def apply_env_file(path: Path, *, override_keys: frozenset[str] | None = None) -> None:
+    """Load KEY=VALUE lines into os.environ.
+
+    Existing variables stay put, except names in override_keys (dev .env must
+    win for ERP_PRODUCT so .\\run.ps1 -Product switches the running product).
+    """
     if not path.is_file():
         return
+    forced = override_keys or frozenset()
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        key = key.strip()
+        if key in os.environ and key not in forced:
+            continue
+        os.environ[key] = value.strip().strip('"').strip("'")

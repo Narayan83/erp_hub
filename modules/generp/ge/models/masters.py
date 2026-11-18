@@ -117,6 +117,9 @@ class Product(Base, TimestampMixin):
     is_in_shop: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     # Shop prints its own barcodes (product key + MRP). Off = manufacturer barcodes.
     own_barcode: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Unique-barcode stock: one barcode number covers this many pieces, printed that many times.
+    multi_barcode: Mapped[bool] = mapped_column(Boolean, default=False)
+    barcode_piece_qty: Mapped[float] = mapped_column(Numeric(14, 3), default=1)
 
     category: Mapped["Category | None"] = relationship("Category")
     sub_category: Mapped["SubCategory | None"] = relationship("SubCategory")

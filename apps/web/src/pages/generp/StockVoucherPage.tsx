@@ -7,6 +7,8 @@ import { TABLE_PAGE_SIZE, useClientPager } from '../../lib/generp/paginate'
 import { parseNum, todayISO } from '../../lib/generp/saleBillMath'
 import type {
   Branch,
+  CompanyProfile,
+  Lot,
   Product,
   StockVoucher,
   StockVoucherListItem,
@@ -22,6 +24,7 @@ type LineRow = {
   quantity: number
   rate: number
   narration: string
+  lot_id: string
 }
 
 type Props = {
@@ -45,6 +48,7 @@ function emptyLine(lineRole: LineRole = 'NORMAL'): LineRow {
     quantity: 1,
     rate: 0,
     narration: '',
+    lot_id: '',
   }
 }
 
@@ -59,6 +63,8 @@ export function StockVoucherPage({ voucherType, heading }: Props) {
   const isConversion = voucherType === 'CONVERSION'
 
   const [branches, setBranches] = useState<Branch[]>([])
+  const [lotEnabled, setLotEnabled] = useState(false)
+  const [lots, setLots] = useState<Lot[]>([])
   const [branchId, setBranchId] = useState('')
   const [counterpartyBranchId, setCounterpartyBranchId] = useState('')
   const [voucherDate, setVoucherDate] = useState(todayISO())
@@ -106,8 +112,19 @@ export function StockVoucherPage({ voucherType, heading }: Props) {
   }, [])
 
   const loadBranches = useCallback(async () => {
-    const rows = await api.get<Branch[]>('/stock/branches')
+    const [rows, profile] = await Promise.all([
+      api.get<Branch[]>('/stock/branches'),
+      api.get<CompanyProfile>('/company-profile').catch(() => null),
+    ])
     setBranches(rows)
+    const lotsOn = profile?.lot_enabled === true
+    setLotEnabled(lotsOn)
+    if (lotsOn) {
+      const lotRows = await api.get<Lot[]>('/stock/lots').catch(() => [] as Lot[])
+      setLots(lotRows.filter((l) => l.is_active !== false))
+    } else {
+      setLots([])
+    }
     if (!branchId && rows.length) setBranchId(rows[0].id)
   }, [branchId])
 
@@ -173,6 +190,7 @@ export function StockVoucherPage({ voucherType, heading }: Props) {
         quantity: Number(it.quantity || 0),
         rate: Number(it.rate || 0),
         narration: it.narration || '',
+        lot_id: '',
       })),
     )
     if (!(v.items || []).length) {
@@ -268,6 +286,7 @@ export function StockVoucherPage({ voucherType, heading }: Props) {
           quantity: l.quantity,
           rate: l.rate,
           narration: l.narration.trim() || null,
+          lot_id: l.lot_id || null,
         })),
       })
       setStatus(`Saved ${result.voucher_no}`)
@@ -428,6 +447,7 @@ export function StockVoucherPage({ voucherType, heading }: Props) {
               <tr>
                 <th style={{ width: needsLineRole ? '34%' : '42%' }}>Product</th>
                 {needsLineRole && <th style={{ width: '12%' }}>Role</th>}
+                {lotEnabled ? <th style={{ width: '14%' }}>Lot</th> : null}
                 <th style={{ width: '10%' }}>Qty</th>
                 <th style={{ width: '10%' }}>Rate</th>
                 <th>Line Narration</th>
@@ -464,6 +484,22 @@ export function StockVoucherPage({ voucherType, heading }: Props) {
                       </select>
                     </td>
                   )}
+                  {lotEnabled ? (
+                    <td>
+                      <select
+                        className="input"
+                        value={line.lot_id}
+                        onChange={(e) => updateLine(line.key, { lot_id: e.target.value })}
+                      >
+                        <option value="">—</option>
+                        {lots.map((lot) => (
+                          <option key={lot.id} value={lot.id}>
+                            {lot.code} {lot.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  ) : null}
                   <td>
                     <input
                       className="input"

@@ -44,6 +44,8 @@ SHORT_BILL_TYPES = [
     ("XRAY", "XRay Bill", "xray_bill", "XRY", 2),
     ("OBS", "Observation Bill", "observation_bill", "OBS", 3),
     ("IMM", "Immunization Bill", "immunization_bill", "IMB", 4),
+    ("AMB", "Ambulance", "ambulance", "AMB", 5),
+    ("GAS", "Medical Gas", "medical_gas", "GAS", 6),
 ]
 
 PREFIXES = [
@@ -287,10 +289,15 @@ async def _seed_short_bill_types(session: AsyncSession) -> None:
         item.code: item
         for item in (await session.execute(select(ShortBillType))).scalars().all()
     }
-    # Defaults are inserted once. Later edits and deletes must not be overwritten on startup.
-    if existing:
-        return
+    taken_menus = {
+        item.menu_code
+        for item in existing.values()
+    }
+    # Insert built-in types that are not in the database yet. Do not rewrite
+    # rows the hospital has already edited.
     for code, name, menu_code, prefix, sort_order in SHORT_BILL_TYPES:
+        if code in existing or menu_code in taken_menus:
+            continue
         session.add(
             ShortBillType(
                 code=code,

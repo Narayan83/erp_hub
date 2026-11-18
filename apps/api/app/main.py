@@ -43,7 +43,6 @@ os.environ.setdefault("ERP_PRODUCT", settings.erp_product)
 
 async def _bootstrap() -> None:
     await ensure_database_exists(str(settings.database_url))
-    init_engine(settings.database_url, echo=settings.sql_echo)
     configure_auth(secret_key=settings.secret_key, algorithm=settings.algorithm)
     configure_auth_routes(
         secret_key=settings.secret_key, idle_minutes=settings.idle_timeout_minutes
@@ -60,8 +59,25 @@ async def _bootstrap() -> None:
         except ModuleNotFoundError:
             logger.info("Module %s has no models package", name)
 
+    from erp_core.pg_schema import (  # noqa: E402
+        apply_postgres_schemas,
+        create_schemas,
+        migrate_public_tables_to_schemas,
+        schemas_for_enabled_modules,
+    )
+
+    table_schemas = apply_postgres_schemas(Base)
+    schema_list = schemas_for_enabled_modules(enabled_modules())
+    init_engine(
+        settings.database_url,
+        echo=settings.sql_echo,
+        search_path_schemas=schema_list,
+    )
+
     engine = get_engine()
     async with engine.begin() as conn:
+        await conn.run_sync(lambda sync_conn: create_schemas(sync_conn, schema_list))
+        await conn.run_sync(lambda sync_conn: migrate_public_tables_to_schemas(sync_conn, table_schemas))
         await conn.run_sync(Base.metadata.create_all)
         await ensure_added_columns(conn)
 

@@ -20,6 +20,8 @@ from modules.generp.ge.services.product_import import ensure_default_categories
 from modules.generp.ge.services.stock_posting import ensure_main_branch
 
 CUSTOMER_TABLES = (
+    "stock_barcode_moves",
+    "stock_barcodes",
     "voucher_items",
     "voucher_payments",
     "voucher_entries",
@@ -37,6 +39,7 @@ CUSTOMER_TABLES = (
     "discount_schemes",
     "products",
     "sub_categories",
+    "lot_masters",
     "categories",
     "shop_banners",
     "parties",
@@ -116,6 +119,8 @@ async def reset_company_data(session: AsyncSession) -> None:
     profile.sale_rate_source = "product_master"
     profile.allow_negative_stock = True
     profile.purchase_bill_parking = False
+    profile.unique_barcode_stock = False
+    profile.lot_enabled = False
     profile.logo_path = None
 
     cfg = (

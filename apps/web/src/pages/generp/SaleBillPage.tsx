@@ -217,6 +217,7 @@ export function SaleBillPage({
   const [paymentModes, setPaymentModes] = useState<PaymentMode[]>([])
   const [cfg, setCfg] = useState<SaleEntryConfig>(DEFAULT_CFG)
   const [allowNegativeStock, setAllowNegativeStock] = useState(true)
+  const [uniqueBarcodeStock, setUniqueBarcodeStock] = useState(false)
 
   const [billNo, setBillNo] = useState('—')
   const [lastNo, setLastNo] = useState('Assigned when you save')
@@ -329,6 +330,7 @@ export function SaleBillPage({
       setPaymentModes(modes)
       setCfg({ ...DEFAULT_CFG, ...saleCfg })
       setAllowNegativeStock(profile?.allow_negative_stock !== false)
+      setUniqueBarcodeStock(profile?.unique_barcode_stock === true)
       const modeKey = voucherType === 'WHOLESALE' ? 'wholesale_tax_mode' : 'sale_tax_mode'
       const raw = String(profile?.[modeKey] || (voucherType === 'SALE' ? 'inclusive' : 'exclusive'))
       setTaxInclusive(raw.toLowerCase() === 'inclusive')
@@ -429,18 +431,81 @@ export function SaleBillPage({
       if (!raw) return
       const scanned = isScannedBarcode(raw) || after === 'add'
       let product: Product | null = null
-      try {
-        product = await api.get<Product>('/products/lookup', { q: raw })
-      } catch {
-        product = null
+      let stockBarcodeId: string | null = null
+      let lotId: string | null = null
+      let barcodeRemaining = 0
+      let qty = Number(cfg.default_qty || 1)
+      let rate = 0
+      let mrpOverride: number | null = null
+      if (uniqueBarcodeStock) {
+        try {
+          const bc = await api.get<{
+            id: string
+            barcode: string
+            product_id: string
+            product_name?: string
+            qty_remaining: number
+            ask_qty: boolean
+            sale_rate: number
+            mrp: number
+            status: string
+            lot_id?: string | null
+          }>('/stock/barcodes/lookup', { q: raw })
+          const remaining = Number(bc.qty_remaining || 0)
+          if (remaining <= 0 || bc.status === 'sold' || bc.status === 'transferred' || bc.status === 'returned') {
+            alert(
+              bc.status === 'transferred'
+                ? `Barcode ${bc.barcode} is transferred.`
+                : `Barcode ${bc.barcode} is already sold.`,
+            )
+            return
+          }
+          qty = 1
+          if (bc.ask_qty) {
+            const entered = window.prompt(
+              `Barcode ${bc.barcode} · ${bc.product_name || ''}\nAvailable ${remaining}. Enter quantity to sell:`,
+              '1',
+            )
+            if (entered == null) return
+            qty = Number(entered)
+            if (!Number.isFinite(qty) || qty <= 0) {
+              alert('Quantity must be greater than zero.')
+              return
+            }
+            if (qty > remaining + 1e-9) {
+              alert(`Only ${remaining} left on this barcode.`)
+              return
+            }
+          }
+          product = await api.get<Product>(`/products/${bc.product_id}`)
+          rate = Number(bc.sale_rate || 0) > 0 ? Number(bc.sale_rate) : productRate(product, true)
+          mrpOverride = Number(bc.mrp || 0)
+          stockBarcodeId = bc.id
+          lotId = bc.lot_id || null
+          barcodeRemaining = remaining
+        } catch (err) {
+          if (err instanceof ApiError && err.statusCode !== 404) {
+            alert(err.message)
+            return
+          }
+        }
+      }
+      if (!product) {
+        try {
+          product = await api.get<Product>('/products/lookup', { q: raw })
+        } catch {
+          product = null
+        }
       }
       if (!product) {
         setEntryName('Not found')
         setCurrentProduct(null)
         return
       }
-      const rate = productRate(product, scanned)
-      const qty = Number(cfg.default_qty || 1)
+      if (!stockBarcodeId) {
+        rate = productRate(product, scanned)
+        qty = Number(cfg.default_qty || 1)
+      }
       const addLine = () => {
         const hit = checkSaleCeiling({
           rate,
@@ -459,7 +524,15 @@ export function SaleBillPage({
           product.gst_id,
         )
         setItems((prev) => {
-          if (!allowNegativeStock && !editVoucherId) {
+          if (stockBarcodeId) {
+            const used = prev
+              .filter((it) => it.stock_barcode_id === stockBarcodeId)
+              .reduce((sum, it) => sum + Number(it.qty || 0), 0)
+            if (used + qty > barcodeRemaining + 1e-9) {
+              alert(`Only ${barcodeRemaining} left on this barcode.`)
+              return prev
+            }
+          } else if (!allowNegativeStock && !editVoucherId) {
             const stock = Number(product.current_stock || 0)
             const needed = billQtyForProduct(prev, product.id) + qty
             if (needed > stock + 1e-9) {
@@ -475,7 +548,9 @@ export function SaleBillPage({
               name: product.name,
               qty,
               rate,
-              mrp: Number(product.mrp || 0),
+              mrp: mrpOverride != null && mrpOverride > 0 ? mrpOverride : Number(product.mrp || 0),
+              stock_barcode_id: stockBarcodeId,
+              lot_id: lotId,
               sale_price: productListPrice(product),
               max_discount_pct: Number(product.max_discount_pct || 0),
               disc_pct: billDiscPct,
@@ -491,7 +566,7 @@ export function SaleBillPage({
         setEntryName('—')
         entryRef.current?.focus()
       }
-      if (scanned) {
+      if (scanned || stockBarcodeId) {
         addLine()
         return
       }
@@ -509,7 +584,7 @@ export function SaleBillPage({
         addLine()
       })
     },
-    [entryText, cfg, billDiscPct, gstById, productRate, productListPrice],
+    [entryText, cfg, billDiscPct, gstById, productRate, productListPrice, uniqueBarcodeStock],
   )
 
   const setEntryFieldsEnabled = currentProduct !== null && entryName !== '—'
@@ -846,6 +921,8 @@ export function SaleBillPage({
         sale_price: Number(it.sale_price || 0),
         discount_amount: round2((it.qty * it.rate * it.disc_pct) / 100),
         gst_id: it.gst_id,
+        lot_id: it.lot_id || null,
+        stock_barcode_id: it.stock_barcode_id || null,
       })),
       payments: paymentModes
         .map((m) => ({
@@ -948,6 +1025,8 @@ export function SaleBillPage({
           disc_pct: disc_pct || discPct,
           gst_id: it.gst_id,
           gst_rate: Number(it.gst_rate || 0),
+          lot_id: it.lot_id || null,
+          stock_barcode_id: it.stock_barcode_id || null,
         })
       }
       setItems(loaded)

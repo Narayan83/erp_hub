@@ -1,4 +1,14 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { api } from '../../../api/client'
+import {
+  CheckItem,
+  CheckListFilter,
+  CheckSelection,
+  SegmentedPicker,
+  selectionIsEmpty,
+  selectionParam,
+  SummaryCards,
+} from './ReportFilterControls'
 import {
   DateRangeReportShell,
   DoctorOption,
@@ -113,16 +123,25 @@ type Form3CReport = {
 
 type Report = DoctorsReport | ColumnReport | PaymentModeReport | DateServiceReport | Form3CReport
 
-const REPORT_TYPES: { value: string; label: string }[] = [
-  { value: 'sharing', label: 'Sharing' },
-  { value: 'normal', label: 'Normal' },
-  { value: 'day_wise_summary', label: 'Day Wise Summary' },
-  { value: 'payment_mode_summary', label: 'Payment Mode Summary' },
-  { value: 'column_wise', label: 'Column Wise' },
-  { value: 'date_service_summary', label: 'Date / Service Summary' },
-  { value: 'date_service_details', label: 'Date / Service Details' },
-  { value: 'form3c', label: 'Form 3C' },
+const REPORT_TYPES: { value: string; label: string; title: string }[] = [
+  { value: 'day_wise_summary', label: 'Day wise Summary', title: 'Each doctor, each day total (no bill lines)' },
+  { value: 'payment_mode_summary', label: 'Payment Mode Summary', title: 'Totals by payment mode, then doctor' },
+  { value: 'sharing', label: 'Doctor wise Sharing', title: 'Hospital / doctor split with bill detail and service summary' },
+  { value: 'column_wise', label: 'Column wise', title: 'One row per bill; each marked service is its own column' },
+  { value: 'date_service_summary', label: 'Date/Service Summary', title: 'Each date, then service totals' },
+  { value: 'date_service_details', label: 'Date/Service Details', title: 'Each date, then service, then each bill line' },
+  { value: 'form3c', label: 'Form 3C', title: 'Flat OPD + IPD bill list with discount and net' },
 ]
+
+const EXCEL_NAMES: Record<string, string> = {
+  day_wise_summary: 'Doctor_Day_Wise_Summary.xlsx',
+  payment_mode_summary: 'Doctor_Payment_Mode_Summary.xlsx',
+  sharing: 'Doctor_Wise_Sharing.xlsx',
+  column_wise: 'Doctor_Collection_Column_Wise.xlsx',
+  date_service_summary: 'Date_Service_Summary.xlsx',
+  date_service_details: 'Date_Service_Details.xlsx',
+  form3c: 'Form_3C.xlsx',
+}
 
 const SPLIT_COLUMNS: ReportColumn[] = [
   { key: 'total', label: 'Total', align: 'right' },
@@ -168,35 +187,8 @@ function detailRow(r: DetailRow): ReportRow {
   }
 }
 
-function buildDoctors(data: DoctorsReport): ReportTableModel[] {
-  const columns = detailColumns()
-  const tables: ReportTableModel[] = data.doctors.map((d) => {
-    const rows: ReportRow[] = []
-    for (const dg of d.date_groups) {
-      dg.rows.forEach((r) => rows.push(detailRow(r)))
-      rows.push({
-        kind: 'subtotal',
-        cells: { service: `${data.report_type === 'day_wise_summary' ? 'Day' : 'Total for'} ${fmtDate(dg.bill_date)}`, ...splitCells(dg) },
-      })
-    }
-    rows.push({
-      kind: 'total',
-      cells: {
-        service: 'Doctor Total',
-        total: fmtMoney(d.grand_total_amount),
-        hospital: fmtMoney(d.grand_hospital_amount),
-        doctor: fmtMoney(d.grand_doctor_amount),
-      },
-    })
-    if (d.service_summary.length) {
-      rows.push({ kind: 'group', cells: { date: 'Service Summary' } })
-      d.service_summary.forEach((s) =>
-        rows.push({ cells: { service: s.service_name, ...splitCells(s) } }),
-      )
-    }
-    return { key: d.doctor_id, title: d.doctor_name, columns, rows }
-  })
-  tables.push({
+function overallSplitTable(data: { overall_total_amount: Amount; overall_hospital_amount: Amount; overall_doctor_amount: Amount }): ReportTableModel {
+  return {
     key: 'overall',
     columns: [{ key: 'label', label: '' }, ...SPLIT_COLUMNS],
     rows: [
@@ -210,11 +202,82 @@ function buildDoctors(data: DoctorsReport): ReportTableModel[] {
         },
       },
     ],
+  }
+}
+
+function buildDayWise(data: DoctorsReport): ReportTableModel[] {
+  const columns: ReportColumn[] = [{ key: 'date', label: 'Date' }, ...SPLIT_COLUMNS]
+  const tables: ReportTableModel[] = data.doctors.map((d) => ({
+    key: d.doctor_id,
+    title: `Doctor: ${d.doctor_name}`,
+    columns,
+    rows: [
+      ...d.date_groups.map((dg) => ({ cells: { date: fmtDate(dg.bill_date), ...splitCells(dg) } })),
+      {
+        kind: 'total' as const,
+        cells: {
+          date: 'Doctor Total',
+          total: fmtMoney(d.grand_total_amount),
+          hospital: fmtMoney(d.grand_hospital_amount),
+          doctor: fmtMoney(d.grand_doctor_amount),
+        },
+      },
+    ],
+  }))
+  tables.push(overallSplitTable(data))
+  return tables
+}
+
+function buildDoctors(data: DoctorsReport): ReportTableModel[] {
+  if (data.report_type === 'day_wise_summary') return buildDayWise(data)
+  const columns = detailColumns()
+  const tables: ReportTableModel[] = data.doctors.map((d) => {
+    const rows: ReportRow[] = []
+    for (const dg of d.date_groups) {
+      rows.push({ kind: 'group', cells: { date: `Date: ${fmtDate(dg.bill_date)}` } })
+      dg.rows.forEach((r) => rows.push(detailRow(r)))
+      rows.push({
+        kind: 'subtotal',
+        cells: { service: `Total for ${fmtDate(dg.bill_date)}`, ...splitCells(dg) },
+      })
+    }
+    rows.push({
+      kind: 'total',
+      cells: {
+        service: 'Doctor Total',
+        total: fmtMoney(d.grand_total_amount),
+        hospital: fmtMoney(d.grand_hospital_amount),
+        doctor: fmtMoney(d.grand_doctor_amount),
+      },
+    })
+    if (d.service_summary.length) {
+      rows.push({ kind: 'group', cells: { date: `Service Summary — ${d.doctor_name}` } })
+      d.service_summary.forEach((s) =>
+        rows.push({ cells: { service: s.service_name, ...splitCells(s) } }),
+      )
+    }
+    return { key: d.doctor_id, title: `Doctor: ${d.doctor_name}`, columns, rows }
   })
+  tables.push(overallSplitTable(data))
   return tables
 }
 
 function buildColumnWise(data: ColumnReport): ReportTableModel[] {
+  if (!data.service_columns.length) {
+    return [
+      {
+        key: 'no-columns',
+        columns: [{ key: 'msg', label: 'Column wise setup needed' }],
+        rows: [
+          {
+            cells: {
+              msg: 'No service is marked for columns. Open Masters → Patient Service Master, set "Dr Collection Col" = Y on the services you want as columns, save, then load again.',
+            },
+          },
+        ],
+      },
+    ]
+  }
   const columns: ReportColumn[] = [
     { key: 'date', label: 'Date' },
     { key: 'type', label: 'Bill Type' },
@@ -230,7 +293,7 @@ function buildColumnWise(data: ColumnReport): ReportTableModel[] {
 
   const tables: ReportTableModel[] = data.doctors.map((d) => ({
     key: d.doctor_id,
-    title: d.doctor_name,
+    title: `Doctor: ${d.doctor_name}`,
     columns,
     rows: [
       ...d.rows.map((r) => ({
@@ -387,44 +450,146 @@ function buildTables(data: Report): ReportTableModel[] {
   }
 }
 
+function renderSummary(data: Report) {
+  if (data.report_type === 'form3c') {
+    return (
+      <SummaryCards
+        cards={[
+          { label: 'Bills', value: String(data.rows.length) },
+          { label: 'Gross', value: fmtMoney(data.overall_total_amount) },
+          { label: 'Discount', value: fmtMoney(data.overall_discount_amount), tone: 'debit' },
+          { label: 'Net', value: fmtMoney(data.overall_net_amount), tone: 'net' },
+        ]}
+      />
+    )
+  }
+  if (data.report_type === 'column_wise') {
+    if (!data.service_columns.length) return null
+    return (
+      <SummaryCards
+        cards={[
+          { label: 'Doctors', value: String(data.doctors.length) },
+          { label: 'Overall Total Collection', value: fmtMoney(data.overall_total_amount), tone: 'net' },
+        ]}
+      />
+    )
+  }
+  return (
+    <SummaryCards
+      cards={[
+        { label: 'Hospital', value: fmtMoney(data.overall_hospital_amount) },
+        { label: 'Doctor', value: fmtMoney(data.overall_doctor_amount) },
+        { label: 'Total', value: fmtMoney(data.overall_total_amount), tone: 'net' },
+      ]}
+    />
+  )
+}
+
+const HELP = (
+  <>
+    <h3>Quick steps</h3>
+    <ol>
+      <li>Choose From / To dates (or a quick range like Today / This Month).</li>
+      <li>Tick Doctors, Payment Modes and Services in the lists. Search boxes filter the lists as you type.</li>
+      <li>Drag the bottom edge of a list to show more items. Select All / Clear act on the items currently shown.</li>
+      <li>Pick a report type button, then click Load Report. Print opens a printable preview; Excel downloads the sheet.</li>
+    </ol>
+    <h3>Report types</h3>
+    <ul>
+      <li><b>Day wise Summary</b> — each doctor, each day total (no bill lines).</li>
+      <li><b>Payment Mode Summary</b> — totals by payment mode, then doctor.</li>
+      <li><b>Doctor wise Sharing</b> — hospital / doctor split with bill detail and a service summary per doctor.</li>
+      <li><b>Column wise</b> — one row per bill; each marked service is its own amount column.</li>
+      <li><b>Date/Service Summary</b> — each date, then totals of the selected services.</li>
+      <li><b>Date/Service Details</b> — each date, then service, then each bill line.</li>
+      <li><b>Form 3C</b> — flat OPD + IPD bill list: S.No, date, bill type, bill no, payment mode, patient, service, total, discount, net.</li>
+    </ul>
+    <h3>Column wise setup (one time)</h3>
+    <ul>
+      <li>Masters → Patient Service Master → open the service (e.g. Consultation, OT) → set “Dr Collection Col” = Y → save.</li>
+      <li>Only services marked Y become columns. The Services filter is not used for Column wise.</li>
+    </ul>
+  </>
+)
+
+type ServiceRow = { id: string; name: string; code?: string; is_active?: boolean }
+type PaymentModeRow = { id: string; name: string; is_active?: boolean }
+
 export function DoctorCollectionReportPage() {
   const [reportType, setReportType] = useState('sharing')
-  const [doctorId, setDoctorId] = useState('')
-  const [doctors, setDoctors] = useState<DoctorOption[]>([])
+  const [doctors, setDoctors] = useState<CheckItem[]>([])
+  const [modes, setModes] = useState<CheckItem[]>([])
+  const [services, setServices] = useState<CheckItem[]>([])
+  const [doctorSel, setDoctorSel] = useState<CheckSelection>(null)
+  const [modeSel, setModeSel] = useState<CheckSelection>(null)
+  const [serviceSel, setServiceSel] = useState<CheckSelection>(null)
 
   useEffect(() => {
-    loadAllDoctors().then(setDoctors).catch(() => setDoctors([]))
+    loadAllDoctors()
+      .then((list: DoctorOption[]) =>
+        setDoctors(list.map((d) => ({ id: d.id, label: d.full_name || d.doctor_code || d.id }))),
+      )
+      .catch(() => setDoctors([]))
+    api
+      .get<PaymentModeRow[]>('/hospital/payment-modes')
+      .then((list) =>
+        setModes(
+          list
+            .filter((m) => m.is_active !== false && (m.name || '').trim())
+            .map((m) => ({ id: m.name.trim(), label: m.name.trim() })),
+        ),
+      )
+      .catch(() => setModes([]))
+    api
+      .get<ServiceRow[] | { items: ServiceRow[] }>('/hospital/patient-services')
+      .then((res) => {
+        const list = Array.isArray(res) ? res : res.items ?? []
+        setServices(
+          list.filter((s) => s.is_active !== false).map((s) => ({ id: s.id, label: s.name || s.code || s.id })),
+        )
+      })
+      .catch(() => setServices([]))
   }, [])
+
+  const serviceFilterUsed = reportType !== 'column_wise'
 
   return (
     <DateRangeReportShell<Report>
-      title="Doctor Collection Report"
+      title="Doctor wise Collection Report"
       endpoint="/hospital/reports/doctor-collection"
-      params={{ report_type: reportType, doctor_ids: doctorId ? [doctorId] : undefined }}
+      defaultRange="today"
+      runLabel="Load Report"
+      excelFileName={EXCEL_NAMES[reportType] ?? 'Doctor_Collection_Report.xlsx'}
+      help={HELP}
+      params={{
+        report_type: reportType,
+        doctor_ids: selectionParam(doctors, doctorSel),
+        payment_modes: selectionParam(modes, modeSel),
+        service_ids: serviceFilterUsed ? selectionParam(services, serviceSel) : undefined,
+      }}
+      validate={() => {
+        if (selectionIsEmpty(doctorSel)) return 'Select at least one doctor, or tick All Doctors.'
+        if (selectionIsEmpty(modeSel)) return 'Select at least one payment mode, or tick All Payment Modes.'
+        if (serviceFilterUsed && selectionIsEmpty(serviceSel)) return 'Select at least one service, or tick All Services.'
+        return null
+      }}
       buildTables={buildTables}
-      filters={
+      renderSummary={renderSummary}
+      belowFilters={
         <>
-          <div className="hms-field-wrap">
-            <label>Report Type</label>
-            <select className="hms-field" value={reportType} onChange={(e) => setReportType(e.target.value)}>
-              {REPORT_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
+          <div className="hms-checklist-row">
+            <CheckListFilter title="Doctors" items={doctors} value={doctorSel} onChange={setDoctorSel} />
+            <CheckListFilter title="Payment Modes" items={modes} value={modeSel} onChange={setModeSel} />
+            <CheckListFilter
+              title="Services"
+              items={services}
+              value={serviceSel}
+              onChange={setServiceSel}
+              disabled={!serviceFilterUsed}
+              note={serviceFilterUsed ? undefined : 'Column wise uses the services marked “Dr Collection Col = Y”.'}
+            />
           </div>
-          <div className="hms-field-wrap">
-            <label>Doctor</label>
-            <select className="hms-field" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
-              <option value="">All Doctors</option>
-              {doctors.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.full_name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <SegmentedPicker options={REPORT_TYPES} value={reportType} onChange={setReportType} />
         </>
       }
     />

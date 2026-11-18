@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv.unreadable/
 venv/
 .env
 *.egg-info/
@@ -9,6 +10,7 @@ venv/
 node_modules/
 dist/
 apps/web/dist/
+apps/web/dist.bak-corrupt/
 apps/api/storage/**
 !apps/api/storage/.gitkeep
 .pgdata/

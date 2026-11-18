@@ -14,6 +14,23 @@ const EMPTY: CompanyProfile = {
   sale_rate_source: 'product_master',
   allow_negative_stock: true,
   purchase_bill_parking: false,
+  unique_barcode_stock: false,
+  lot_enabled: false,
+}
+
+function withFlags(data: CompanyProfile): CompanyProfile {
+  return {
+    ...EMPTY,
+    ...data,
+    sale_tax_mode: data.sale_tax_mode || 'inclusive',
+    wholesale_tax_mode: data.wholesale_tax_mode || 'exclusive',
+    purchase_tax_mode: data.purchase_tax_mode || 'exclusive',
+    sale_rate_source: data.sale_rate_source === 'fifo' ? 'fifo' : 'product_master',
+    allow_negative_stock: data.allow_negative_stock !== false,
+    purchase_bill_parking: data.purchase_bill_parking === true,
+    unique_barcode_stock: data.unique_barcode_stock === true,
+    lot_enabled: data.lot_enabled === true,
+  }
 }
 
 const TAX_OPTIONS: { value: TaxMode; label: string }[] = [
@@ -36,16 +53,7 @@ export function CompanyProfilePage() {
     void (async () => {
       try {
         const data = await api.get<CompanyProfile>('/company-profile')
-        setForm({
-          ...EMPTY,
-          ...data,
-          sale_tax_mode: data.sale_tax_mode || 'inclusive',
-          wholesale_tax_mode: data.wholesale_tax_mode || 'exclusive',
-          purchase_tax_mode: data.purchase_tax_mode || 'exclusive',
-          sale_rate_source: data.sale_rate_source === 'fifo' ? 'fifo' : 'product_master',
-          allow_negative_stock: data.allow_negative_stock !== false,
-          purchase_bill_parking: data.purchase_bill_parking === true,
-        })
+        setForm(withFlags(data))
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Failed to load settings')
       }
@@ -86,8 +94,10 @@ export function CompanyProfilePage() {
         sale_rate_source: form.sale_rate_source === 'fifo' ? 'fifo' : 'product_master',
         allow_negative_stock: form.allow_negative_stock !== false,
         purchase_bill_parking: form.purchase_bill_parking === true,
+        unique_barcode_stock: form.unique_barcode_stock === true,
+        lot_enabled: form.lot_enabled === true,
       })
-      setForm({ ...EMPTY, ...saved })
+      setForm(withFlags(saved))
       alert('Settings saved.')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Save failed')
@@ -97,16 +107,7 @@ export function CompanyProfilePage() {
   }
 
   const applyProfile = (data: CompanyProfile) => {
-    setForm({
-      ...EMPTY,
-      ...data,
-      sale_tax_mode: data.sale_tax_mode || 'inclusive',
-      wholesale_tax_mode: data.wholesale_tax_mode || 'exclusive',
-      purchase_tax_mode: data.purchase_tax_mode || 'exclusive',
-      sale_rate_source: data.sale_rate_source === 'fifo' ? 'fifo' : 'product_master',
-      allow_negative_stock: data.allow_negative_stock !== false,
-      purchase_bill_parking: data.purchase_bill_parking === true,
-    })
+    setForm(withFlags(data))
   }
 
   const uploadLogo = async (file: File) => {
@@ -362,6 +363,46 @@ export function CompanyProfilePage() {
           >
             <option value="no">No — enter full bill in one step</option>
             <option value="yes">Yes — receive now, price later</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="settings-box">
+        <div className="settings-box-title">Unique barcode stock</div>
+        <p className="hint" style={{ margin: 0 }}>
+          When Yes, each purchase piece gets its own barcode. A product marked Multiple barcode
+          shares one barcode across many pieces: 70 pieces at 10 per barcode prints that barcode 7
+          times. Sale of that barcode asks how many pieces to reduce.
+        </p>
+        <label className="settings-field">
+          <span>Unique barcode stock</span>
+          <select
+            className="input"
+            value={form.unique_barcode_stock ? 'yes' : 'no'}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, unique_barcode_stock: e.target.value === 'yes' }))
+            }
+          >
+            <option value="no">No — one product barcode</option>
+            <option value="yes">Yes — a barcode for each inward piece</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="settings-box">
+        <div className="settings-box-title">Lots</div>
+        <p className="hint" style={{ margin: 0 }}>
+          When Yes, Lot Master is used and purchase bills can pick a lot. Stock report groups by lot.
+        </p>
+        <label className="settings-field">
+          <span>Lot enabled</span>
+          <select
+            className="input"
+            value={form.lot_enabled ? 'yes' : 'no'}
+            onChange={(e) => setForm((f) => ({ ...f, lot_enabled: e.target.value === 'yes' }))}
+          >
+            <option value="no">No</option>
+            <option value="yes">Yes — show Lot Master and lot on purchase</option>
           </select>
         </label>
       </div>

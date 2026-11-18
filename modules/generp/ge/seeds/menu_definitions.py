@@ -33,6 +33,7 @@ MENU_DEFINITIONS = [
     ("print_template_designer", "Print Template Designer", "masters", 15, None, None, None),
     ("company_profile", "Software Setup", "masters", 16, None, None, None),
     ("discount_master", "Discount Master", "masters", 17, None, None, None),
+    ("lot_master", "Lot Master", "masters", 19, None, None, None),
     ("dashboard_shortcuts", "Menu Shortcuts", "masters", 18, None, None, None),
 
     # --- Stock ---
@@ -87,6 +88,9 @@ MENU_DEFINITIONS = [
     ("sundry_debtors_details", "Sundry Debtors Details", "reports", 5, None, None, None),
     ("supplier_schedule", "Supplier Schedule", "reports", 6, None, None, None),
     ("supplier_details", "Supplier Details", "reports", 7, None, None, None),
+    ("barcode_stock_report", "Barcode Stock", "reports", 8, None, None, None),
+    ("item_stock_report", "Item Code Stock", "reports", 9, None, None, None),
+    ("stock_movement_report", "Stock Report", "reports", 10, None, None, None),
 
     # --- User Management ---
     ("user_addition_modification", "User Addition/Modification", "user_management", 1, None, None, None),

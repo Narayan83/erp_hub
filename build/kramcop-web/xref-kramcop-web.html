@@ -12455,6 +12455,10 @@ imported by:
  &#8226;   <a href="#http.cookiejar">http.cookiejar</a>
  &#8226;   <a href="#http.server">http.server</a>
  &#8226;   <a href="#jose.jwt">jose.jwt</a>
+ &#8226;   <a href="#modules.contract_farming.models.masters">modules.contract_farming.models.masters</a>
+ &#8226;   <a href="#modules.contract_farming.models.project">modules.contract_farming.models.project</a>
+ &#8226;   <a href="#modules.contract_farming.models.transaction">modules.contract_farming.models.transaction</a>
+ &#8226;   <a href="#modules.contract_farming.services.seed_data">modules.contract_farming.services.seed_data</a>
  &#8226;   <a href="#modules.kramcop.kc.api.v1.endpoints.masters">modules.kramcop.kc.api.v1.endpoints.masters</a>
  &#8226;   <a href="#modules.kramcop.kc.models.masters">modules.kramcop.kc.models.masters</a>
  &#8226;   <a href="#modules.kramcop.kc.models.member">modules.kramcop.kc.models.member</a>
@@ -12526,6 +12530,8 @@ imports:
 imported by:
     <a href="#fastapi.encoders">fastapi.encoders</a>
  &#8226;   <a href="#fractions">fractions</a>
+ &#8226;   <a href="#modules.contract_farming.models.transaction">modules.contract_farming.models.transaction</a>
+ &#8226;   <a href="#modules.contract_farming.services.seed_data">modules.contract_farming.services.seed_data</a>
  &#8226;   <a href="#openpyxl.compat.numbers">openpyxl.compat.numbers</a>
  &#8226;   <a href="#pydantic._internal._generate_schema">pydantic._internal._generate_schema</a>
  &#8226;   <a href="#pydantic._internal._validators">pydantic._internal._validators</a>
@@ -20642,6 +20648,9 @@ imported by:
  &#8226;   <a href="#erp_core.models.auth">erp_core.models.auth</a>
  &#8226;   <a href="#erp_core.models.cashbook">erp_core.models.cashbook</a>
  &#8226;   <a href="#erp_core.models.masters">erp_core.models.masters</a>
+ &#8226;   <a href="#modules.contract_farming.models.masters">modules.contract_farming.models.masters</a>
+ &#8226;   <a href="#modules.contract_farming.models.project">modules.contract_farming.models.project</a>
+ &#8226;   <a href="#modules.contract_farming.models.transaction">modules.contract_farming.models.transaction</a>
  &#8226;   <a href="#modules.kramcop.kc.core.database">modules.kramcop.kc.core.database</a>
  &#8226;   <a href="#run_server.py">run_server.py</a>
 
@@ -20916,6 +20925,7 @@ imported by:
  &#8226;   <a href="#erp_core.services.menu">erp_core.services.menu</a>
  &#8226;   <a href="#erp_core.services.print_configs">erp_core.services.print_configs</a>
  &#8226;   <a href="#erp_core.services.seed">erp_core.services.seed</a>
+ &#8226;   <a href="#modules.kramcop.kc.services.access">modules.kramcop.kc.services.access</a>
  &#8226;   <a href="#run_server.py">run_server.py</a>
 
   </div>
@@ -21203,6 +21213,7 @@ imports:
  &#8226;   <a href="#erp_core.security">erp_core.security</a>
  &#8226;   <a href="#erp_core.services">erp_core.services</a>
  &#8226;   <a href="#erp_core.services.menu">erp_core.services.menu</a>
+ &#8226;   <a href="#modules.contract_farming.seed">modules.contract_farming.seed</a>
  &#8226;   <a href="#modules.kramcop.seed">modules.kramcop.seed</a>
  &#8226;   <a href="#sqlalchemy">sqlalchemy</a>
  &#8226;   <a href="#sqlalchemy.ext.asyncio">sqlalchemy.ext.asyncio</a>
@@ -27378,9 +27389,173 @@ imported by:
   <a target="code" href="///D:/fullstack/others/erp_hub/modules/__init__.py" type="text/plain"><tt>modules</tt></a>
 <span class="moduletype">Package</span>  <div class="import">
 imported by:
-    <a href="#modules.generp">modules.generp</a>
+    <a href="#modules.contract_farming">modules.contract_farming</a>
+ &#8226;   <a href="#modules.generp">modules.generp</a>
  &#8226;   <a href="#modules.hospital">modules.hospital</a>
  &#8226;   <a href="#modules.kramcop">modules.kramcop</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="modules.contract_farming"></a>
+  <a target="code" href="///D:/fullstack/others/erp_hub/modules/contract_farming/__init__.py" type="text/plain"><tt>modules.contract_farming</tt></a>
+<span class="moduletype">Package</span>  <div class="import">
+imports:
+    <a href="#modules">modules</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#modules.contract_farming.models">modules.contract_farming.models</a>
+ &#8226;   <a href="#modules.contract_farming.seed">modules.contract_farming.seed</a>
+ &#8226;   <a href="#modules.contract_farming.services">modules.contract_farming.services</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="modules.contract_farming.models"></a>
+  <a target="code" href="///D:/fullstack/others/erp_hub/modules/contract_farming/models/__init__.py" type="text/plain"><tt>modules.contract_farming.models</tt></a>
+<span class="moduletype">Package</span>  <div class="import">
+imports:
+    <a href="#modules.contract_farming">modules.contract_farming</a>
+ &#8226;   <a href="#modules.contract_farming.models.masters">modules.contract_farming.models.masters</a>
+ &#8226;   <a href="#modules.contract_farming.models.project">modules.contract_farming.models.project</a>
+ &#8226;   <a href="#modules.contract_farming.models.transaction">modules.contract_farming.models.transaction</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#modules.contract_farming.models.masters">modules.contract_farming.models.masters</a>
+ &#8226;   <a href="#modules.contract_farming.models.project">modules.contract_farming.models.project</a>
+ &#8226;   <a href="#modules.contract_farming.models.transaction">modules.contract_farming.models.transaction</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="modules.contract_farming.models.masters"></a>
+  <a target="code" href="///D:/fullstack/others/erp_hub/modules/contract_farming/models/masters.py" type="text/plain"><tt>modules.contract_farming.models.masters</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#datetime">datetime</a>
+ &#8226;   <a href="#erp_core.database">erp_core.database</a>
+ &#8226;   <a href="#modules.contract_farming.models">modules.contract_farming.models</a>
+ &#8226;   <a href="#sqlalchemy">sqlalchemy</a>
+ &#8226;   <a href="#sqlalchemy.orm">sqlalchemy.orm</a>
+ &#8226;   <a href="#uuid">uuid</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#modules.contract_farming.models">modules.contract_farming.models</a>
+ &#8226;   <a href="#modules.contract_farming.services.seed_data">modules.contract_farming.services.seed_data</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="modules.contract_farming.models.project"></a>
+  <a target="code" href="///D:/fullstack/others/erp_hub/modules/contract_farming/models/project.py" type="text/plain"><tt>modules.contract_farming.models.project</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#datetime">datetime</a>
+ &#8226;   <a href="#erp_core.database">erp_core.database</a>
+ &#8226;   <a href="#modules.contract_farming.models">modules.contract_farming.models</a>
+ &#8226;   <a href="#sqlalchemy">sqlalchemy</a>
+ &#8226;   <a href="#sqlalchemy.orm">sqlalchemy.orm</a>
+ &#8226;   <a href="#uuid">uuid</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#modules.contract_farming.models">modules.contract_farming.models</a>
+ &#8226;   <a href="#modules.contract_farming.services.seed_data">modules.contract_farming.services.seed_data</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="modules.contract_farming.models.transaction"></a>
+  <a target="code" href="///D:/fullstack/others/erp_hub/modules/contract_farming/models/transaction.py" type="text/plain"><tt>modules.contract_farming.models.transaction</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#datetime">datetime</a>
+ &#8226;   <a href="#decimal">decimal</a>
+ &#8226;   <a href="#erp_core.database">erp_core.database</a>
+ &#8226;   <a href="#modules.contract_farming.models">modules.contract_farming.models</a>
+ &#8226;   <a href="#sqlalchemy">sqlalchemy</a>
+ &#8226;   <a href="#sqlalchemy.orm">sqlalchemy.orm</a>
+ &#8226;   <a href="#uuid">uuid</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#modules.contract_farming.models">modules.contract_farming.models</a>
+ &#8226;   <a href="#modules.contract_farming.services.seed_data">modules.contract_farming.services.seed_data</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="modules.contract_farming.seed"></a>
+  <a target="code" href="///D:/fullstack/others/erp_hub/modules/contract_farming/seed.py" type="text/plain"><tt>modules.contract_farming.seed</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#modules.contract_farming">modules.contract_farming</a>
+ &#8226;   <a href="#modules.contract_farming.services.seed_data">modules.contract_farming.services.seed_data</a>
+ &#8226;   <a href="#sqlalchemy.ext.asyncio">sqlalchemy.ext.asyncio</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#erp_core.services.seed">erp_core.services.seed</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="modules.contract_farming.services"></a>
+  <a target="code" href="///D:/fullstack/others/erp_hub/modules/contract_farming/services/__init__.py" type="text/plain"><tt>modules.contract_farming.services</tt></a>
+<span class="moduletype">Package</span>  <div class="import">
+imports:
+    <a href="#modules.contract_farming">modules.contract_farming</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#modules.contract_farming.services.seed_data">modules.contract_farming.services.seed_data</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="modules.contract_farming.services.seed_data"></a>
+  <a target="code" href="///D:/fullstack/others/erp_hub/modules/contract_farming/services/seed_data.py" type="text/plain"><tt>modules.contract_farming.services.seed_data</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#datetime">datetime</a>
+ &#8226;   <a href="#decimal">decimal</a>
+ &#8226;   <a href="#modules.contract_farming.models.masters">modules.contract_farming.models.masters</a>
+ &#8226;   <a href="#modules.contract_farming.models.project">modules.contract_farming.models.project</a>
+ &#8226;   <a href="#modules.contract_farming.models.transaction">modules.contract_farming.models.transaction</a>
+ &#8226;   <a href="#modules.contract_farming.services">modules.contract_farming.services</a>
+ &#8226;   <a href="#sqlalchemy">sqlalchemy</a>
+ &#8226;   <a href="#sqlalchemy.ext.asyncio">sqlalchemy.ext.asyncio</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#modules.contract_farming.seed">modules.contract_farming.seed</a>
 
   </div>
 
@@ -28009,7 +28184,8 @@ imported by:
   <a target="code" href="///D:/fullstack/others/erp_hub/modules/kramcop/kc/services/access.py" type="text/plain"><tt>modules.kramcop.kc.services.access</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
-    <a href="#modules.kramcop.kc.models.auth">modules.kramcop.kc.models.auth</a>
+    <a href="#erp_core.product_config">erp_core.product_config</a>
+ &#8226;   <a href="#modules.kramcop.kc.models.auth">modules.kramcop.kc.models.auth</a>
  &#8226;   <a href="#modules.kramcop.kc.models.masters">modules.kramcop.kc.models.masters</a>
  &#8226;   <a href="#modules.kramcop.kc.services">modules.kramcop.kc.services</a>
  &#8226;   <a href="#sqlalchemy">sqlalchemy</a>
@@ -47291,6 +47467,10 @@ imported by:
  &#8226;   <a href="#erp_core.services.menu">erp_core.services.menu</a>
  &#8226;   <a href="#erp_core.services.print_configs">erp_core.services.print_configs</a>
  &#8226;   <a href="#erp_core.services.seed">erp_core.services.seed</a>
+ &#8226;   <a href="#modules.contract_farming.models.masters">modules.contract_farming.models.masters</a>
+ &#8226;   <a href="#modules.contract_farming.models.project">modules.contract_farming.models.project</a>
+ &#8226;   <a href="#modules.contract_farming.models.transaction">modules.contract_farming.models.transaction</a>
+ &#8226;   <a href="#modules.contract_farming.services.seed_data">modules.contract_farming.services.seed_data</a>
  &#8226;   <a href="#modules.kramcop.kc.api.v1.endpoints.masters">modules.kramcop.kc.api.v1.endpoints.masters</a>
  &#8226;   <a href="#modules.kramcop.kc.api.v1.endpoints.members">modules.kramcop.kc.api.v1.endpoints.members</a>
  &#8226;   <a href="#modules.kramcop.kc.models.masters">modules.kramcop.kc.models.masters</a>
@@ -50744,6 +50924,8 @@ imported by:
  &#8226;   <a href="#erp_core.services.menu">erp_core.services.menu</a>
  &#8226;   <a href="#erp_core.services.print_configs">erp_core.services.print_configs</a>
  &#8226;   <a href="#erp_core.services.seed">erp_core.services.seed</a>
+ &#8226;   <a href="#modules.contract_farming.seed">modules.contract_farming.seed</a>
+ &#8226;   <a href="#modules.contract_farming.services.seed_data">modules.contract_farming.services.seed_data</a>
  &#8226;   <a href="#modules.kramcop.kc.api.v1.endpoints.masters">modules.kramcop.kc.api.v1.endpoints.masters</a>
  &#8226;   <a href="#modules.kramcop.kc.api.v1.endpoints.members">modules.kramcop.kc.api.v1.endpoints.members</a>
  &#8226;   <a href="#modules.kramcop.kc.schema">modules.kramcop.kc.schema</a>
@@ -51180,6 +51362,9 @@ imported by:
  &#8226;   <a href="#erp_core.models.masters">erp_core.models.masters</a>
  &#8226;   <a href="#erp_core.services.auth">erp_core.services.auth</a>
  &#8226;   <a href="#erp_core.services.menu">erp_core.services.menu</a>
+ &#8226;   <a href="#modules.contract_farming.models.masters">modules.contract_farming.models.masters</a>
+ &#8226;   <a href="#modules.contract_farming.models.project">modules.contract_farming.models.project</a>
+ &#8226;   <a href="#modules.contract_farming.models.transaction">modules.contract_farming.models.transaction</a>
  &#8226;   <a href="#modules.kramcop.kc.models.masters">modules.kramcop.kc.models.masters</a>
  &#8226;   <a href="#modules.kramcop.kc.models.member">modules.kramcop.kc.models.member</a>
  &#8226;   <a href="#modules.kramcop.kc.models.settings">modules.kramcop.kc.models.settings</a>
@@ -59510,6 +59695,9 @@ imported by:
  &#8226;   <a href="#erp_core.models.cashbook">erp_core.models.cashbook</a>
  &#8226;   <a href="#erp_core.models.masters">erp_core.models.masters</a>
  &#8226;   <a href="#fastapi.encoders">fastapi.encoders</a>
+ &#8226;   <a href="#modules.contract_farming.models.masters">modules.contract_farming.models.masters</a>
+ &#8226;   <a href="#modules.contract_farming.models.project">modules.contract_farming.models.project</a>
+ &#8226;   <a href="#modules.contract_farming.models.transaction">modules.contract_farming.models.transaction</a>
  &#8226;   <a href="#modules.kramcop.kc.api.v1.endpoints.masters">modules.kramcop.kc.api.v1.endpoints.masters</a>
  &#8226;   <a href="#modules.kramcop.kc.api.v1.endpoints.members">modules.kramcop.kc.api.v1.endpoints.members</a>
  &#8226;   <a href="#modules.kramcop.kc.models.masters">modules.kramcop.kc.models.masters</a>

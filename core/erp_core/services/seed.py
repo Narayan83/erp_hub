@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.models.auth import Menu, Role, RoleMenuPermission, User, UserRoleMapping, UserType
@@ -13,6 +13,7 @@ from erp_core.product_config import (
     load_module_menus,
     load_product_config,
     module_enabled,
+    stock_admin_full_names,
 )
 from erp_core.security import get_password_hash
 from erp_core.services.menu import SUPER_ADMIN_ROLE
@@ -164,7 +165,7 @@ async def seed_initial_data(session: AsyncSession) -> None:
 
     admin_cfg = cfg.get("default_admin") or {}
     email = str(admin_cfg.get("email") or f"admin@{product}.example.com").lower()
-    username = str(admin_cfg.get("username") or "admin").strip() or "admin"
+    username = str(admin_cfg.get("username") or product).strip().lower() or product
     user = (await session.execute(select(User).where(User.email == email))).scalar_one_or_none()
     if not user:
         # Migrate early seed emails (.local / .test) rejected by strict validators
@@ -184,10 +185,10 @@ async def seed_initial_data(session: AsyncSession) -> None:
             taken = (
                 await session.execute(select(User).where(User.username == username))
             ).scalar_one_or_none()
-            if taken is not None and username == "admin" and product != "hospital":
+            if taken is not None and username != product:
                 username = product
                 taken = (
-                    await session.execute(select(User).where(User.username == username))
+                    await session.execute(select(User).where(func.lower(User.username) == username))
                 ).scalar_one_or_none()
             if taken is not None:
                 user = taken
@@ -201,6 +202,23 @@ async def seed_initial_data(session: AsyncSession) -> None:
                 )
                 session.add(user)
                 await session.flush()
+    # Keep the seeded admin username equal to this product (hospital, generp, …).
+    if user is not None and (user.username or "").lower() != username:
+        taken = (
+            await session.execute(
+                select(User).where(func.lower(User.username) == username, User.id != user.id)
+            )
+        ).scalar_one_or_none()
+        if taken is None:
+            user.username = username
+    # Stock names from another product ("Kramcop Admin") must not linger on this admin.
+    expected_name = str(admin_cfg.get("full_name") or "Admin")
+    if (
+        user is not None
+        and user.full_name in stock_admin_full_names()
+        and user.full_name != expected_name
+    ):
+        user.full_name = expected_name
     # Ensure role mapping exists (e.g. after email rename).
     # Use .first() — older DBs may already have duplicate (user_id, role_id) rows.
     mapped = (
@@ -218,7 +236,7 @@ async def seed_initial_data(session: AsyncSession) -> None:
     ).scalar_one_or_none()
     display = str(cfg.get("display_name") or product.title())
     # Untouched defaults from another product ("Hospital ERP") must not linger after a switch.
-    stock_names = {"Hospital ERP", "GenERP", "Lodge ERP", "Kramcop"}
+    stock_names = {"Hospital ERP", "GenERP", "Lodge ERP", "Kramcop", "Contract Farming"}
     if not company:
         session.add(CompanyProfile(code="MAIN", name=display))
     elif company.name in stock_names and company.name != display:

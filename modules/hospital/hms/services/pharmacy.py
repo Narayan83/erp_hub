@@ -224,7 +224,7 @@ class PharmacyService:
         await self.session.refresh(item)
         return PharmacySupplierRead.model_validate(item)
 
-    async def list_group_mappings(self, group_id: str) -> list[PharmacyGroupMappingRead]:
+    async def list_group_mappings(self, group_id: str | None = None) -> list[PharmacyGroupMappingRead]:
         items = await self.group_repo.list_by_group(group_id)
         return [PharmacyGroupMappingRead.model_validate(item) for item in items]
 

@@ -19,6 +19,7 @@ from modules.generp.ge.models.stock import (
 )
 from modules.generp.ge.schemas.stock import StockVoucherIn
 from modules.generp.ge.services.document_numbers import next_document_no, peek_document_no
+from modules.generp.ge.services.stock_barcodes import reverse_barcode_moves, transfer_out_barcodes
 from modules.generp.ge.services.stock_lots import add_lot, consume_fifo, restore_fifo, reverse_source_lots
 from modules.generp.ge.services.stock_guard import assert_stock_available, lock_products
 
@@ -202,10 +203,18 @@ async def create_stock_voucher(
                 rate=float(it.rate or 0),
                 amount=amount,
                 narration=it.narration,
+                lot_id=getattr(it, "lot_id", None) or None,
                 sort_order=idx,
             )
         )
         sign = _line_sign(vtype, role)
+        if vtype == "TRANSFER_OUT" and sign < 0:
+            await transfer_out_barcodes(
+                session,
+                product_id=it.product_id,
+                qty=float(it.quantity),
+                stock_voucher_id=voucher.id,
+            )
         await _apply_stock(
             session,
             product_id=it.product_id,
@@ -280,6 +289,7 @@ async def cancel_stock_voucher(session: AsyncSession, voucher_id: str) -> StockV
         elif float(m.qty_delta or 0) < 0:
             await restore_fifo(session, m.product_id, -float(m.qty_delta))
         await session.delete(m)
+    await reverse_barcode_moves(session, stock_voucher_id=voucher_id)
     v.is_cancelled = True
     await session.flush()
     return v

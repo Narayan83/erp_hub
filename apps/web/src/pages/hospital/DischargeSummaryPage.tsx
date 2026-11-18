@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { api } from '../../api/client'
+import { listAll } from './billing/paged'
 import { PatientLookup } from './billing/PatientLookup'
 import { openHospitalReport } from './billing/report'
-import { Admission, Doctor, Page, Patient, todayIso } from './billing/types'
+import { Admission, Doctor, Patient, todayIso } from './billing/types'
 
 type Summary = {
   id: string
@@ -57,9 +58,9 @@ export function DischargeSummaryPage() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    void api.get<Page<Doctor>>('/hospital/doctors', { page: 1, page_size: 200 }).then((d) => {
-      setDoctors(d.items || [])
-      if (d.items?.[0]) setDoctorId(d.items[0].id)
+    void listAll<Doctor>('/hospital/doctors').then((docs) => {
+      setDoctors(docs)
+      if (docs[0]) setDoctorId(docs[0].id)
     })
   }, [])
 

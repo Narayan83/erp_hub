@@ -230,13 +230,27 @@ export function BarcodeGenerationPage() {
     setError('')
     try {
       const rows: BatchRow[] = []
+      const productCache = new Map<string, Product>()
+      const barcodeCache = new Map<string, ProductBarcode[]>()
       for (const item of seed.items) {
-        const p = await api.get<Product>(`/products/${item.product_id}`)
-        const barcodes = await api.get<ProductBarcode[]>(`/products/${p.id}/barcodes`)
+        let p = productCache.get(item.product_id)
+        if (!p) {
+          p = await api.get<Product>(`/products/${item.product_id}`)
+          productCache.set(item.product_id, p)
+        }
+        let barcodeValue = String(item.barcode || '').trim()
+        if (!barcodeValue) {
+          let barcodes = barcodeCache.get(p.id)
+          if (!barcodes) {
+            barcodes = await api.get<ProductBarcode[]>(`/products/${p.id}/barcodes`)
+            barcodeCache.set(p.id, barcodes)
+          }
+          barcodeValue = resolvePrintBarcode(p, barcodes)
+        }
         rows.push({
           product: p,
-          copies: Math.max(1, Math.min(500, Number(item.qty || 1))),
-          barcodeValue: resolvePrintBarcode(p, barcodes),
+          copies: Math.max(1, Math.min(5000, Number(item.qty || 1))),
+          barcodeValue,
         })
       }
       setBatchRows(rows)

@@ -6,7 +6,7 @@ import { ExportFormatButtons } from '../../components/generp/ExportFormatButtons
 import { downloadExcel, SPREADSHEET_ACCEPT, type SpreadsheetFormat } from '../../lib/generp/exportExcel'
 import { handleEnterAsTab } from '../../lib/generp/enterAsTab'
 import { LIST_PAGE_SIZE, pageCount } from '../../lib/generp/paginate'
-import type { Category, GstRate, Product, ProductImage, ProductImportResult, SubCategory, TaxSlab } from '../../generpTypes'
+import type { Category, CompanyProfile, GstRate, Product, ProductImage, ProductImportResult, SubCategory, TaxSlab } from '../../generpTypes'
 
 type ItemType = 'goods' | 'service'
 
@@ -28,6 +28,8 @@ type FormState = {
   opening_stock: number
   is_in_shop: boolean
   own_barcode: boolean
+  multi_barcode: boolean
+  barcode_piece_qty: number
 }
 
 type TabId = 'product' | 'classify' | 'pricing' | 'tax' | 'stock' | 'shop' | 'images' | 'variants'
@@ -82,6 +84,8 @@ const EMPTY: FormState = {
   opening_stock: 0,
   is_in_shop: false,
   own_barcode: false,
+  multi_barcode: false,
+  barcode_piece_qty: 1,
 }
 
 function num(v: unknown) {
@@ -108,6 +112,8 @@ function productToForm(p: Product): FormState {
     opening_stock: num(p.opening_stock),
     is_in_shop: !!p.is_in_shop,
     own_barcode: !!p.own_barcode,
+    multi_barcode: !!p.multi_barcode,
+    barcode_piece_qty: num(p.barcode_piece_qty) || 1,
   }
 }
 
@@ -210,6 +216,8 @@ function payloadFromForm(form: FormState, forCreate: boolean, taxSlabs: TaxSlab[
     opening_stock: form.opening_stock,
     is_in_shop: form.is_in_shop,
     own_barcode: form.own_barcode,
+    multi_barcode: form.multi_barcode,
+    barcode_piece_qty: form.barcode_piece_qty > 0 ? form.barcode_piece_qty : 1,
   }
   if (forCreate) {
     return { ...base, code: form.code.trim() || null }
@@ -249,14 +257,17 @@ export function ProductCreationPage() {
   const [busy, setBusy] = useState(false)
   const [exportBusy, setExportBusy] = useState(false)
   const [status, setStatus] = useState('')
+  const [uniqueBarcodeStock, setUniqueBarcodeStock] = useState(false)
 
   const loadLookups = useCallback(async () => {
-    const [cats, g] = await Promise.all([
+    const [cats, g, profile] = await Promise.all([
       api.get<Category[]>('/categories'),
       api.get<GstRate[]>('/gst'),
+      api.get<CompanyProfile>('/company-profile').catch(() => null),
     ])
     setCategories(cats)
     setGst(uniqueGstRates(g))
+    setUniqueBarcodeStock(profile?.unique_barcode_stock === true)
   }, [])
 
   const loadProducts = useCallback(async (q = '', pageNo = 1) => {
@@ -964,6 +975,62 @@ export function ProductCreationPage() {
                   </p>
                 )}
               </div>
+              {uniqueBarcodeStock ? (
+                <div className="settings-field" style={{ marginTop: 8 }}>
+                  <span>Multiple barcode</span>
+                  <div className="pc-kind" role="radiogroup" aria-label="Multiple barcode">
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={form.multi_barcode}
+                      className={`pc-kind-opt${form.multi_barcode ? ' active' : ''}`}
+                      data-skip-enter="true"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => setForm((f) => ({ ...f, multi_barcode: true }))}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={!form.multi_barcode}
+                      className={`pc-kind-opt${!form.multi_barcode ? ' active' : ''}`}
+                      data-skip-enter="true"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => setForm((f) => ({ ...f, multi_barcode: false }))}
+                    >
+                      No — one barcode per piece
+                    </button>
+                  </div>
+                  {form.multi_barcode ? (
+                    <label className="settings-field" style={{ marginTop: 8 }}>
+                      <span>Pieces per barcode</span>
+                      <input
+                        className="input"
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={form.barcode_piece_qty || ''}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            barcode_piece_qty: Number(e.target.value) || 0,
+                          }))
+                        }
+                      />
+                      <p className="hint" style={{ margin: '4px 0 0' }}>
+                        How many pieces share one barcode. Purchase 70 with 10 here and this row
+                        prints 7 labels of the same barcode. Other items still print one barcode per
+                        piece. Sale of this barcode asks for the quantity to reduce.
+                      </p>
+                    </label>
+                  ) : (
+                    <p className="hint" style={{ margin: 0 }}>
+                      Each purchased piece gets its own barcode. Sale of that barcode reduces 1.
+                    </p>
+                  )}
+                </div>
+              ) : null}
             </div>
           ) : null}
 

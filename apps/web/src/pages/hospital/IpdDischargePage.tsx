@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client'
+import { listAll } from './billing/paged'
 import { openHospitalReport } from './billing/report'
+import { ResizableScrollTable } from './billing/ResizableScrollTable'
+import { ServiceSearchField } from './billing/ServiceSearchField'
 import {
   Admission,
   BillLine,
@@ -23,7 +26,6 @@ type CatalogRow = CatalogService & { qty: number; checked: boolean }
 type PayAmount = Record<string, { amount: string; document_no: string }>
 
 export function IpdDischargePage({ mode = 'create', initialBillId }: Props) {
-  const navigate = useNavigate()
   const [params] = useSearchParams()
   const modify = mode === 'modify'
   const admissionFromQuery = params.get('admission_id')
@@ -80,13 +82,13 @@ export function IpdDischargePage({ mode = 'create', initialBillId }: Props) {
   useEffect(() => {
     void (async () => {
       const [docs, w, services, pms, cats] = await Promise.all([
-        api.get<Page<Doctor>>('/hospital/doctors', { page: 1, page_size: 200 }),
+        listAll<Doctor>('/hospital/doctors'),
         api.get<Ward[]>('/hospital/wards'),
         api.get<CatalogService[]>('/hospital/ipd-discharge/catalog/services'),
         api.get<PayMode[]>('/hospital/payment-modes').catch(() => api.get<PayMode[]>('/accounts/payment-modes')),
         api.get<Array<{ id: string; name: string }>>('/hospital/service-categories'),
       ])
-      setDoctors(docs.items || [])
+      setDoctors(docs)
       setWards(w || [])
       setCatalogAll(services || [])
       setPayModes(pms || [])
@@ -331,26 +333,8 @@ export function IpdDischargePage({ mode = 'create', initialBillId }: Props) {
     }
   }
 
-  const actions = [
-    { label: 'Admitted List', go: () => navigate('/ipd_bill') },
-    { label: 'Reprint Bill', go: () => navigate('/ipd_bill_reprint') },
-    { label: 'Discharge Summary', go: () => navigate('/diagnose_management') },
-    { label: 'Collect Advance', go: () => navigate('/advance_collection') },
-    { label: 'Adjust Advance', go: enterAdvance },
-    { label: 'IPD Admission', go: () => navigate('/in_patient_admission') },
-  ]
-
   return (
     <div className="hms-bill-page">
-      {!modify && (
-        <div className="hms-bill-actions">
-          {actions.map((a) => (
-            <button key={a.label} className="hms-btn" type="button" onClick={a.go}>
-              {a.label}
-            </button>
-          ))}
-        </div>
-      )}
       {error && <div className="hms-error">{error}</div>}
 
       <div className="hms-bill-split">
@@ -512,51 +496,46 @@ export function IpdDischargePage({ mode = 'create', initialBillId }: Props) {
         </aside>
 
         <section className="hms-bill-right">
-          <div className="hms-box">
-            <div className="hms-box-title">Doctor</div>
-            <div className="hms-inline-bar" style={{ marginTop: 4 }}>
-              <label className="hms-section-label">Doctor</label>
-              <select className="hms-field" value={doctorId} disabled={modify} onChange={(e) => setDoctorId(e.target.value)}>
-                <option value="">Select doctor</option>
-                {doctors.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.doctor_code} — {d.full_name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="hms-filter-bar">
+            <label className="hms-section-label">Doctor</label>
+            <select
+              className="hms-field hms-doctor-field"
+              value={doctorId}
+              disabled={modify}
+              onChange={(e) => setDoctorId(e.target.value)}
+            >
+              <option value="">Select doctor</option>
+              {doctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.doctor_code} — {d.full_name}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <div className="hms-box">
-            <div className="hms-box-title">Service Filters</div>
-            <div className="hms-inline-bar" style={{ marginTop: 4 }}>
-              <label className="hms-section-label">Category</label>
-              <select className="hms-field" style={{ maxWidth: 200 }} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-                <option value="">All Categories</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <button className="hms-btn" type="button" onClick={() => { setCategoryId(''); setCatalogSearch('') }}>
-                Show All
-              </button>
-            </div>
-          </div>
-
-          <div className="hms-inline-bar">
-            <span className="hms-section-label">Available Services</span>
-            <input
+          <div className="hms-filter-bar">
+            <ServiceSearchField value={catalogSearch} onChange={setCatalogSearch} />
+            <select
               className="hms-field"
-              style={{ maxWidth: 280 }}
-              placeholder="Search service name or code..."
-              value={catalogSearch}
-              onChange={(e) => setCatalogSearch(e.target.value)}
-            />
+              style={{ maxWidth: 160 }}
+              aria-label="Category"
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+            >
+              <option value="">All Categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <button className="hms-btn hms-btn-sm" type="button" onClick={() => { setCategoryId(''); setCatalogSearch('') }}>
+              Show All
+            </button>
           </div>
-          <div className="hms-scroll-table">
-            <table className="hms-table">
+
+          <ResizableScrollTable>
+            <table className="hms-table hms-table-compact">
               <thead>
                 <tr>
                   <th style={{ width: 34 }}>Add</th>
@@ -603,20 +582,20 @@ export function IpdDischargePage({ mode = 'create', initialBillId }: Props) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ResizableScrollTable>
 
           <div className="hms-inline-bar">
             <span className="hms-section-label">Bill Lines</span>
             <div style={{ flex: 1 }} />
-            <button className="hms-btn" type="button" onClick={addSelected}>
+            <button className="hms-btn hms-btn-sm" type="button" onClick={addSelected}>
               Add Selected
             </button>
-            <button className="hms-btn" type="button" onClick={() => setLines((p) => p.slice(0, -1))}>
+            <button className="hms-btn hms-btn-sm" type="button" onClick={() => setLines((p) => p.slice(0, -1))}>
               Remove Line
             </button>
           </div>
-          <div className="hms-scroll-table">
-            <table className="hms-table">
+          <ResizableScrollTable>
+            <table className="hms-table hms-table-compact">
               <thead>
                 <tr>
                   <th>Service</th>
@@ -667,7 +646,7 @@ export function IpdDischargePage({ mode = 'create', initialBillId }: Props) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ResizableScrollTable>
 
           <div className="hms-bill-footer">
             <button className="hms-btn hms-btn-primary" type="button" disabled={busy} onClick={() => void onSubmit()}>

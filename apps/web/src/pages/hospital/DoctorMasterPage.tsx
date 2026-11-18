@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
+import { listAll } from './billing/paged'
 import './billing/hms-master.css'
 
 type Mode = 'Create' | 'Modify' | 'Delete'
@@ -45,8 +46,6 @@ type Doctor = {
   email?: string | null
   specialization?: string | null
 }
-
-type Page = { items: Doctor[] }
 
 const EMPTY = {
   title: 'Dr',
@@ -101,10 +100,10 @@ export function DoctorMasterPage() {
   async function load() {
     const [d, docs] = await Promise.all([
       api.get<Dept[]>('/hospital/departments'),
-      api.get<Page>('/hospital/doctors', { page: 1, page_size: 200 }),
+      listAll<Doctor>('/hospital/doctors'),
     ])
     setDepts(d)
-    setRows(docs.items || [])
+    setRows(docs)
   }
 
   useEffect(() => {

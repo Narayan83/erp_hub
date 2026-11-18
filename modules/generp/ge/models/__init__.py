@@ -27,7 +27,16 @@ from modules.generp.ge.models.cashbook import CashbookVoucher, CashbookVoucherLi
 from modules.generp.ge.models.dashboard import DashboardShortcut
 from modules.generp.ge.models.discounts import DiscountScheme
 from modules.generp.ge.models.orders import Order, OrderItem
-from modules.generp.ge.models.stock import Branch, StockLot, StockMovement, StockVoucher, StockVoucherItem
+from modules.generp.ge.models.stock import (
+    Branch,
+    LotMaster,
+    StockBarcode,
+    StockBarcodeMove,
+    StockLot,
+    StockMovement,
+    StockVoucher,
+    StockVoucherItem,
+)
 from modules.generp.ge.models.transactions import (
     DocumentSequence,
     DocumentNumberRule,
@@ -68,6 +77,9 @@ __all__ = [
     "CashbookVoucher",
     "CashbookVoucherLine",
     "Branch",
+    "LotMaster",
+    "StockBarcode",
+    "StockBarcodeMove",
     "StockVoucher",
     "StockVoucherItem",
     "StockLot",

@@ -80,6 +80,9 @@ class VoucherItem(Base, TimestampMixin):
     mrp: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
     sale_price: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
     profit_pct: Mapped[float] = mapped_column(Numeric(8, 2), default=0)
+    lot_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True, index=True)
+    # Sale line that was scanned from a unique stock barcode.
+    stock_barcode_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True, index=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     voucher: Mapped["Voucher"] = relationship(back_populates="items")

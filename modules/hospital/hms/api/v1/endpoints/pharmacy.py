@@ -161,7 +161,7 @@ async def delete_supplier(
 
 @router.get("/group-mappings", response_model=list[PharmacyGroupMappingRead])
 async def list_group_mappings(
-    group_id: str = Query(..., min_length=1),
+    group_id: str | None = Query(None),
     _: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):

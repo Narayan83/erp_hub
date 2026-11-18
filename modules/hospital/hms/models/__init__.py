@@ -137,3 +137,27 @@ __all__ = [
     "UserType",
     "Ward",
 ]
+
+# erp_core.User stores doctor_id without a foreign key, because the doctors
+# table belongs to this module. Attach the link only when hospital models load
+# so user screens and cash reports can read the linked doctor.
+from sqlalchemy.orm import relationship as _relationship
+
+if not hasattr(User, "doctor"):
+    User.doctor = _relationship(
+        Doctor,
+        primaryjoin=User.doctor_id == Doctor.id,
+        foreign_keys=[User.doctor_id],
+        viewonly=True,
+        uselist=False,
+    )
+
+# Same for cashbook vouchers: patient_id is stored without a foreign key.
+if not hasattr(CashbookVoucher, "patient"):
+    CashbookVoucher.patient = _relationship(
+        Patient,
+        primaryjoin=CashbookVoucher.patient_id == Patient.id,
+        foreign_keys=[CashbookVoucher.patient_id],
+        viewonly=True,
+        uselist=False,
+    )

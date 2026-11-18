@@ -63,6 +63,50 @@ def label(key: str, default: str | None = None) -> str:
     return str(cfg.get("labels", {}).get(key, default or key))
 
 
+def stock_admin_full_names() -> set[str]:
+    """Default admin names from every product config.
+
+    All products share one users table, so a session can still carry another
+    product's seeded admin ("Kramcop Admin") after a switch.
+    """
+    names: set[str] = set()
+    folder = products_dir()
+    if not folder.is_dir():
+        return names
+    for path in folder.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        full = str((data.get("default_admin") or {}).get("full_name") or "").strip()
+        if full:
+            names.add(full)
+    return names
+
+
+def product_admin_full_name(cfg: dict[str, Any] | None = None) -> str:
+    cfg = load_product_config() if cfg is None else cfg
+    full = str((cfg.get("default_admin") or {}).get("full_name") or "").strip()
+    if full:
+        return full
+    display = str(cfg.get("display_name") or get_product_name()).strip()
+    return f"{display} Admin" if display else "Admin"
+
+
+def present_user_full_name(full_name: str | None) -> str:
+    """Name shown on shared screens (sidebar, dashboard).
+
+    A seeded admin keeps its own row. Common chrome shows this application's
+    name, so Hospital does not greet you as Kramcop Admin.
+    A name that is not one of the stock admin names is left as entered.
+    """
+    expected = product_admin_full_name()
+    name = (full_name or "").strip()
+    if name in stock_admin_full_names():
+        return expected
+    return name or expected
+
+
 def enabled_modules() -> list[str]:
     return list(load_product_config().get("modules") or ["core"])
 

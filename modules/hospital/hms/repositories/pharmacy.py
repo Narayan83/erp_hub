@@ -95,12 +95,11 @@ class PharmacySupplierRepository(BaseRepository[PharmacySupplier]):
 class PharmacyGroupMappingRepository(BaseRepository[PharmacyGroupMapping]):
     model = PharmacyGroupMapping
 
-    async def list_by_group(self, group_id: str) -> list[PharmacyGroupMapping]:
-        result = await self.session.execute(
-            select(PharmacyGroupMapping)
-            .where(PharmacyGroupMapping.group_id == group_id)
-            .order_by(PharmacyGroupMapping.created_at)
-        )
+    async def list_by_group(self, group_id: str | None = None) -> list[PharmacyGroupMapping]:
+        stmt = select(PharmacyGroupMapping).order_by(PharmacyGroupMapping.created_at)
+        if group_id:
+            stmt = stmt.where(PharmacyGroupMapping.group_id == group_id)
+        result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
     async def get_mapping(self, group_id: str, item_id: str) -> PharmacyGroupMapping | None:

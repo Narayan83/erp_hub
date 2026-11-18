@@ -568,6 +568,54 @@ async def _create_tables() -> None:
                 "NUMERIC(8, 2) DEFAULT 0"
             )
         )
+        await conn.execute(
+            text(
+                "ALTER TABLE company_profile ADD COLUMN IF NOT EXISTS unique_barcode_stock "
+                "BOOLEAN DEFAULT FALSE"
+            )
+        )
+        await conn.execute(
+            text(
+                "UPDATE company_profile SET unique_barcode_stock = FALSE "
+                "WHERE unique_barcode_stock IS NULL"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE company_profile ADD COLUMN IF NOT EXISTS lot_enabled "
+                "BOOLEAN DEFAULT FALSE"
+            )
+        )
+        await conn.execute(
+            text(
+                "UPDATE company_profile SET lot_enabled = FALSE WHERE lot_enabled IS NULL"
+            )
+        )
+        await conn.execute(
+            text("ALTER TABLE products ADD COLUMN IF NOT EXISTS multi_barcode BOOLEAN DEFAULT FALSE")
+        )
+        await conn.execute(
+            text("UPDATE products SET multi_barcode = FALSE WHERE multi_barcode IS NULL")
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE products ADD COLUMN IF NOT EXISTS barcode_piece_qty "
+                "NUMERIC(14, 3) DEFAULT 1"
+            )
+        )
+        await conn.execute(
+            text(
+                "UPDATE products SET barcode_piece_qty = 1 "
+                "WHERE barcode_piece_qty IS NULL OR barcode_piece_qty <= 0"
+            )
+        )
+        await conn.execute(text("ALTER TABLE voucher_items ADD COLUMN IF NOT EXISTS lot_id UUID"))
+        await conn.execute(
+            text("ALTER TABLE voucher_items ADD COLUMN IF NOT EXISTS stock_barcode_id UUID")
+        )
+        await conn.execute(
+            text("ALTER TABLE stock_voucher_items ADD COLUMN IF NOT EXISTS lot_id UUID")
+        )
 
 
 @asynccontextmanager

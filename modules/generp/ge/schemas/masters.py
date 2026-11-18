@@ -31,6 +31,8 @@ class CompanyProfileUpdate(BaseModel):
     sale_rate_source: str | None = None
     allow_negative_stock: bool | None = None
     purchase_bill_parking: bool | None = None
+    unique_barcode_stock: bool | None = None
+    lot_enabled: bool | None = None
 
     @field_validator("sale_rate_source")
     @classmethod
@@ -66,6 +68,8 @@ class CompanyProfileOut(ORMModel):
     sale_rate_source: str = "product_master"
     allow_negative_stock: bool = True
     purchase_bill_parking: bool = False
+    unique_barcode_stock: bool = False
+    lot_enabled: bool = False
     logo_path: str | None = None
 
     @computed_field
@@ -282,6 +286,8 @@ class ProductIn(BaseModel):
     is_active: bool = True
     is_in_shop: bool = False
     own_barcode: bool = False
+    multi_barcode: bool = False
+    barcode_piece_qty: float = 1
     parent_id: str | None = None
 
     @field_validator("item_type", mode="before")
@@ -309,6 +315,8 @@ class ProductUpdate(BaseModel):
     is_active: bool | None = None
     is_in_shop: bool | None = None
     own_barcode: bool | None = None
+    multi_barcode: bool | None = None
+    barcode_piece_qty: float | None = None
     parent_id: str | None = None
 
     @field_validator("item_type", mode="before")
@@ -356,6 +364,8 @@ class ProductOut(ORMModel):
     is_active: bool
     is_in_shop: bool = False
     own_barcode: bool = False
+    multi_barcode: bool = False
+    barcode_piece_qty: float = 1
     category_name: str | None = None
     sub_category_name: str | None = None
     gst_name: str | None = None

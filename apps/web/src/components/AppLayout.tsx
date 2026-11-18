@@ -3,6 +3,7 @@ import { Outlet, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { MenuOverlayProvider } from './generp/MenuOverlay'
 import Sidebar from './Sidebar'
+import { HospitalShortcutBar } from '../pages/hospital/HospitalShortcutBar'
 
 export function AppLayout() {
   const { code } = useParams()
@@ -26,6 +27,7 @@ export function AppLayout() {
           onLogout={logout}
         />
         <main className="erp-main">
+          {product === 'hospital' ? <HospitalShortcutBar /> : null}
           <Outlet />
         </main>
       </div>

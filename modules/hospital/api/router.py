@@ -23,6 +23,7 @@ from modules.hospital.hms.api.v1.endpoints import (
     lab_tests,
     legacy_migrate,
     letter_templates,
+    menus,
     notifications,
     opd_bills,
     pathology_bills,
@@ -56,6 +57,7 @@ hospital_api.include_router(dashboard.router, prefix="/dashboard", tags=["hospit
 hospital_api.include_router(
     dashboard_shortcuts.router, prefix="/dashboard", tags=["hospital-dashboard-shortcuts"]
 )
+hospital_api.include_router(menus.router, prefix="/menus", tags=["hospital-menus"])
 hospital_api.include_router(users.router, prefix="/users", tags=["hospital-users"])
 hospital_api.include_router(user_types.router, prefix="/user-types", tags=["hospital-user-types"])
 hospital_api.include_router(roles.router, prefix="/roles", tags=["hospital-roles"])

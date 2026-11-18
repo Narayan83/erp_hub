@@ -41,6 +41,10 @@ class CompanyProfile(Base, TimestampMixin):
     sale_rate_source: Mapped[str] = mapped_column(String(20), default="product_master")
     allow_negative_stock: Mapped[bool] = mapped_column(Boolean, default=True)
     purchase_bill_parking: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Each inward piece gets its own stock barcode (garment-style).
+    unique_barcode_stock: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Named lots (Lot Master) on purchase lines and stock reports.
+    lot_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     package_menu_codes: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     # Product-specific extras (hospital GSTINs, etc.)
     extra: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

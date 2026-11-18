@@ -59,7 +59,9 @@ import {
   PurchaseReturnPage,
   SalesReturnPage,
 } from './TradingVoucherPage'
+import { LotMasterPage } from './LotMasterPage'
 import { PurchaseBillPage } from './PurchaseBillPage'
+import { StockDetailReportsPage } from './StockDetailReportsPage'
 import { PurchaseBillDetailsPage } from './PurchaseBillDetailsPage'
 import {
   CustomerDetailsPage,
@@ -112,6 +114,9 @@ export function renderGenerpMenuPage(raw: string): ReactNode {
       break
     case 'company_profile':
       page = <CompanyProfilePage />
+      break
+    case 'lot_master':
+      page = <LotMasterPage />
       break
     case 'daily_collection_report':
       page = <DailyCollectionReportPage />
@@ -253,6 +258,15 @@ export function renderGenerpMenuPage(raw: string): ReactNode {
       break
     case 'supplier_details':
       page = <SupplierDetailsPage />
+      break
+    case 'barcode_stock_report':
+      page = <StockDetailReportsPage mode="barcode" />
+      break
+    case 'item_stock_report':
+      page = <StockDetailReportsPage mode="item" />
+      break
+    case 'stock_movement_report':
+      page = <StockDetailReportsPage mode="movement" />
       break
     case 'sundry_debtors_list':
       page = <CustomerSchedulePage />

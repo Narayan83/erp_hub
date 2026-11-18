@@ -27,11 +27,11 @@ async def ensure_kramcop_schema(session: AsyncSession) -> None:
         "CREATE INDEX IF NOT EXISTS ix_kc_transactions_kind ON kc_transactions (kind)",
         """
         UPDATE kc_transactions SET kind = CASE
-            WHEN typ = 88 AND drcr IN (2, 3, 4) THEN 'share_deletion'
-            WHEN typ = 88 THEN 'share_addition'
-            ELSE 'other'
+            WHEN typ IN (85, 86, 87, 88) AND drcr IN (3, 4) THEN 'share_deletion'
+            WHEN typ IN (85, 86, 87, 88) THEN 'share_addition'
+            ELSE kind
         END
-        WHERE COALESCE(kind, '') IN ('', 'other') AND typ IS NOT NULL
+        WHERE COALESCE(kind, '') IN ('', 'other') AND typ IN (85, 86, 87, 88)
         """,
         "UPDATE kc_app_settings SET value = 'D-' WHERE key = 'acno_prefix' AND COALESCE(value, '') = ''",
     ]

@@ -4,6 +4,7 @@ import { PlaceholderPage } from './pages/PlaceholderPage'
 import { PartyMasterPage } from './pages/core/PartyMasterPage'
 import { CompanyProfilePage } from './pages/core/CompanyProfilePage'
 import { LedgerMasterPage } from './pages/core/LedgerMasterPage'
+import { PaymentModesPage } from './pages/core/PaymentModesPage'
 import { CashbookPage } from './pages/core/CashbookPage'
 import { PrintMasterPage } from './pages/core/PrintMasterPage'
 import { BillTemplateDesignerPage } from './pages/core/billDesigner/BillTemplateDesignerPage'
@@ -191,8 +192,8 @@ const PAGES: Record<string, () => ReactNode> = {
 
   // Pathology / Pharmacy
   pathology_bill: () => <PathologyBillPage />,
-  pathology_bill_reprint: () => <PathologyBillPage />,
-  pathology_bill_cancel: () => <PathologyBillPage />,
+  pathology_bill_reprint: () => <PathologyBillPage mode="reprint" />,
+  pathology_bill_cancel: () => <PathologyBillPage mode="cancel" />,
   pathology_work_list: () => <PathologyWorkListPage />,
   medicine_master: () => <PharmacyItemPage itemType="MD" title="Medicine Master" />,
   surgicals_master: () => <PharmacyItemPage itemType="SG" title="Surgicals Master" />,
@@ -290,6 +291,7 @@ const CORE_CODES = new Set([
   'cashbook',
   'ledger_details',
   'balance_sheet',
+  'payment_mode_creation',
   'user_addition_modification',
 ])
 
@@ -302,6 +304,9 @@ export function renderMenuPage(code: string, product = '') {
   if (product === 'contract_farming') {
     const page = renderContractFarmingMenuPage(code)
     if (page) return page
+  }
+  if (code === 'payment_mode_creation' && product !== 'hospital') {
+    return <PaymentModesPage />
   }
   if (product !== 'hospital' && !CORE_CODES.has(code)) {
     return (

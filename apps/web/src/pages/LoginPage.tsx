@@ -11,15 +11,21 @@ function storedProduct() {
   }
 }
 
-function defaultAdminEmail(product: string) {
+const PRODUCT_IDS = new Set(['hospital', 'generp', 'lodge', 'kramcop', 'contract_farming', 'erp'])
+
+function defaultAdminUser(product: string) {
   const p = (product || 'erp').trim() || 'erp'
-  return `admin@${p}.example.com`
+  return p
+}
+
+function isReplaceableLogin(value: string) {
+  return !value || PRODUCT_IDS.has(value) || /^admin@.+\.example\.com$/i.test(value)
 }
 
 export function LoginPage() {
   const { token, login, displayName, product } = useAuth()
   const initialProduct = product || storedProduct()
-  const [email, setEmail] = useState(() => (initialProduct ? defaultAdminEmail(initialProduct) : ''))
+  const [email, setEmail] = useState(() => (initialProduct ? defaultAdminUser(initialProduct) : ''))
   const [password, setPassword] = useState('admin123')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -31,6 +37,7 @@ export function LoginPage() {
       .get<{
         product: string
         display_name: string
+        default_admin_username?: string
         default_admin_email?: string
       }>('/auth/product')
       .then((info) => {
@@ -44,17 +51,13 @@ export function LoginPage() {
         } catch {
           /* ignore */
         }
-        const nextEmail = (info.default_admin_email || defaultAdminEmail(p)).trim()
-        setEmail((current) => {
-          // Replace blank or a previous product's default admin email
-          if (!current || /^admin@.+\.example\.com$/i.test(current)) return nextEmail
-          return current
-        })
+        const nextUser = (info.default_admin_username || defaultAdminUser(p)).trim()
+        setEmail((current) => (isReplaceableLogin(current) ? nextUser : current))
       })
       .catch(() => {
         if (cancelled) return
         const p = storedProduct() || product
-        if (p) setEmail((current) => current || defaultAdminEmail(p))
+        if (p) setEmail((current) => (isReplaceableLogin(current) ? defaultAdminUser(p) : current))
       })
     return () => {
       cancelled = true
@@ -83,7 +86,7 @@ export function LoginPage() {
         <p className="text-secondary small mb-3">Local web login — product from server config</p>
         {error ? <div className="alert alert-danger py-2">{error}</div> : null}
         <div className="mb-3">
-          <label className="form-label">Email</label>
+          <label className="form-label">Username</label>
           <input className="form-control" value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div className="mb-3">

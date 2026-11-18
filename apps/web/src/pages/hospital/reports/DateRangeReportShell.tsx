@@ -1,5 +1,6 @@
 import { Fragment, ReactNode, useState } from 'react'
 import { api } from '../../../api/client'
+import { listAll } from '../billing/paged'
 import '../billing/hms-master.css'
 
 const TOKEN_KEY = 'erp_token'
@@ -27,14 +28,42 @@ export type ReportTableModel = {
   rows: ReportRow[]
 }
 
+function localIso(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mm}-${dd}`
+}
+
 export function isoToday(): string {
-  return new Date().toISOString().slice(0, 10)
+  return localIso(new Date())
 }
 
 export function firstOfMonthIso(): string {
   const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1, 12).toISOString().slice(0, 10)
+  return localIso(new Date(d.getFullYear(), d.getMonth(), 1))
 }
+
+type DatePreset = { label: string; range: () => [string, string] }
+
+const DATE_PRESETS: DatePreset[] = [
+  { label: 'Today', range: () => [isoToday(), isoToday()] },
+  {
+    label: 'Yesterday',
+    range: () => {
+      const d = new Date()
+      d.setDate(d.getDate() - 1)
+      return [localIso(d), localIso(d)]
+    },
+  },
+  { label: 'This Month', range: () => [firstOfMonthIso(), isoToday()] },
+  {
+    label: 'Last Month',
+    range: () => {
+      const d = new Date()
+      return [localIso(new Date(d.getFullYear(), d.getMonth() - 1, 1)), localIso(new Date(d.getFullYear(), d.getMonth(), 0))]
+    },
+  },
+]
 
 export function fmtMoney(v: number | string | null | undefined): string {
   const n = Number(v ?? 0)
@@ -73,19 +102,7 @@ export type DoctorOption = { id: string; full_name: string; doctor_code?: string
 
 /** /hospital/doctors caps page_size at 100, so page through the results. */
 export async function loadAllDoctors(): Promise<DoctorOption[]> {
-  const out: DoctorOption[] = []
-  let page = 1
-  let pages = 1
-  do {
-    const res = await api.get<{ items: DoctorOption[]; pages: number }>('/hospital/doctors', {
-      page,
-      page_size: 100,
-    })
-    out.push(...res.items)
-    pages = res.pages || 1
-    page += 1
-  } while (page <= pages && page <= 20)
-  return out
+  return listAll<DoctorOption>('/hospital/doctors')
 }
 
 /** Fetch the HTML report with the bearer token and show it via blob URL in a new window. */
@@ -120,6 +137,32 @@ export async function printHtmlReport(path: string): Promise<void> {
   }
 }
 
+/** Download a server-generated file (e.g. `.../excel?...`) with the bearer token. */
+export async function downloadReportFile(path: string, fileName: string): Promise<void> {
+  const token = localStorage.getItem(TOKEN_KEY)
+  const res = await fetch(`${API_BASE}${path.startsWith('/') ? path : `/${path}`}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    let detail: unknown = text
+    try {
+      detail = JSON.parse(text)?.detail ?? text
+    } catch {
+      /* keep raw text */
+    }
+    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
+  }
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 30_000)
+}
+
 type ShellProps<T> = {
   title: string
   hint?: string
@@ -135,6 +178,14 @@ type ShellProps<T> = {
   buildTables: (data: T) => ReportTableModel[]
   /** Optional summary block shown under the tables. */
   renderSummary?: (data: T) => ReactNode
+  /** Full-width controls rendered under the date/filter grid. */
+  belowFilters?: ReactNode
+  /** When set, shows an Excel button that downloads `${endpoint}/excel` as this file name. */
+  excelFileName?: string
+  /** Content of the Help panel; the Help button is hidden when omitted. */
+  help?: ReactNode
+  defaultRange?: 'today' | 'month'
+  runLabel?: string
 }
 
 function ReportTable({ model }: { model: ReportTableModel }) {
@@ -200,12 +251,18 @@ export function DateRangeReportShell<T>({
   datesRequired = true,
   buildTables,
   renderSummary,
+  belowFilters,
+  excelFileName,
+  help,
+  defaultRange = 'month',
+  runLabel = 'Run',
 }: ShellProps<T>) {
-  const [fromDate, setFromDate] = useState(firstOfMonthIso())
+  const [fromDate, setFromDate] = useState(defaultRange === 'today' ? isoToday() : firstOfMonthIso())
   const [toDate, setToDate] = useState(isoToday())
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
 
   function query(): string | null {
     if (datesRequired && (!fromDate || !toDate)) {
@@ -250,12 +307,32 @@ export function DateRangeReportShell<T>({
     }
   }
 
+  async function excel() {
+    if (!excelFileName) return
+    setError(null)
+    const q = query()
+    if (q === null) return
+    try {
+      await downloadReportFile(`${endpoint}/excel${q}`, excelFileName)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   const tables = data ? buildTables(data) : []
 
   return (
     <div className="hms-page">
-      <h1>{title}</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <h1 style={{ flex: 1 }}>{title}</h1>
+        {help ? (
+          <button type="button" className="hms-btn" onClick={() => setShowHelp((v) => !v)}>
+            {showHelp ? 'Hide Help' : 'Help'}
+          </button>
+        ) : null}
+      </div>
       {hint ? <div className="hint">{hint}</div> : null}
+      {help && showHelp ? <div className="hms-box hms-report-help">{help}</div> : null}
       {error ? <div className="hms-error">{error}</div> : null}
 
       <div className="hms-box">
@@ -276,13 +353,36 @@ export function DateRangeReportShell<T>({
           </div>
           {filters}
         </div>
+        <div className="hms-actions" style={{ marginTop: 4 }}>
+          {DATE_PRESETS.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              className="hms-btn"
+              style={{ height: 22, padding: '0 8px', fontSize: 11 }}
+              onClick={() => {
+                const [f, t] = p.range()
+                setFromDate(f)
+                setToDate(t)
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {belowFilters}
         <div className="hms-actions">
           <button type="button" className="hms-btn hms-btn-primary" disabled={busy} onClick={() => void run()}>
-            {busy ? 'Loading…' : 'Run'}
+            {busy ? 'Loading…' : runLabel}
           </button>
           <button type="button" className="hms-btn" onClick={() => void print()}>
             Print
           </button>
+          {excelFileName ? (
+            <button type="button" className="hms-btn" onClick={() => void excel()}>
+              Excel
+            </button>
+          ) : null}
         </div>
       </div>
 

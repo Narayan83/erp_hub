@@ -131,6 +131,11 @@ $script:PyLauncher = Find-Python
 $py = Ensure-ApiVenv
 Ensure-ApiDeps $py
 Ensure-EnvFile $Product
+if ($Product) {
+    $env:ERP_PRODUCT = $Product
+} else {
+    Remove-Item Env:ERP_PRODUCT -ErrorAction SilentlyContinue
+}
 
 $productLabel = $Product
 if (-not $productLabel -and (Test-Path (Join-Path $ApiDir ".env"))) {
@@ -154,7 +159,7 @@ if ($Web) {
 Write-Host "Starting API at $BaseUrl" -ForegroundColor Green
 Write-Host "Health: $BaseUrl/health   Docs: $BaseUrl/docs" -ForegroundColor DarkGray
 Write-Host "Web (if -Web): http://127.0.0.1:5173" -ForegroundColor DarkGray
-Write-Host "Login: admin@$productLabel.example.com / admin123  ($productLabel product)" -ForegroundColor DarkGray
+Write-Host "Login: $productLabel / admin123  ($productLabel product)" -ForegroundColor DarkGray
 Write-Host "Press Ctrl+C to stop." -ForegroundColor DarkGray
 Write-Host ""
 

@@ -14,12 +14,44 @@ DEFAULT_HOST = "dashboard"
 EMPTY_MARKER = "_empty"
 HIDDEN_FROM_PICKER = {"dashboard", "dashboard_shortcut_setup", "print_template_designer"}
 
-DEFAULT_SHORTCUTS = (
-    ("opd_bill", "OPD", "Outpatient billing", 1),
-    ("ipd_bill", "IPD", "Inpatient billing", 2),
-    ("pathology_bill", "Pathology", "Pathology billing", 3),
-    ("doctor_wise_collection_report", "Doctor Collection", "Doctor wise collection report", 4),
-)
+# Shared defaults per screen so every menu can show removable shortcut chips.
+HOST_DEFAULT_SHORTCUTS: dict[str, tuple[tuple[str, str, str, int], ...]] = {
+    "dashboard": (
+        ("opd_bill", "OPD", "Outpatient billing", 1),
+        ("ipd_bill", "IPD", "Inpatient billing", 2),
+        ("pathology_bill", "Pathology", "Pathology billing", 3),
+        ("doctor_wise_collection_report", "Doctor Collection", "Doctor wise collection report", 4),
+    ),
+    "opd_bill": (
+        ("patient_master", "New Patient", "Patient master", 1),
+        ("patient_service_creation", "Service Creation", "Patient service creation", 2),
+        ("opd_bill_reprint", "Reprint Bill", "OPD bill reprint", 3),
+        ("pathology_bill", "Pathology Bill", "Pathology billing", 4),
+        ("advance_collection", "Collect Advance", "Advance collection", 5),
+        ("in_patient_admission", "IPD Admission", "IPD admission", 6),
+        ("ipd_bill", "IPD Bill", "Inpatient billing", 7),
+    ),
+    "in_patient_discharge": (
+        ("ipd_bill", "Admitted List", "IPD bill / admitted list", 1),
+        ("ipd_bill_reprint", "Reprint Bill", "IPD bill reprint", 2),
+        ("diagnose_management", "Discharge Summary", "Discharge summary", 3),
+        ("advance_collection", "Collect Advance", "Advance collection", 4),
+        ("in_patient_admission", "IPD Admission", "IPD admission", 5),
+    ),
+    "ipd_bill": (
+        ("in_patient_admission", "IPD Admission", "IPD admission", 1),
+        ("in_patient_discharge", "Discharge", "IPD discharge", 2),
+        ("ipd_bill_reprint", "Reprint Bill", "IPD bill reprint", 3),
+        ("advance_collection", "Collect Advance", "Advance collection", 4),
+        ("opd_bill", "OPD Bill", "Outpatient billing", 5),
+    ),
+    "pathology_bill": (
+        ("patient_master", "New Patient", "Patient master", 1),
+        ("pathology_bill_reprint", "Reprint Bill", "Pathology bill reprint", 2),
+        ("opd_bill", "OPD Bill", "Outpatient billing", 3),
+        ("advance_collection", "Collect Advance", "Advance collection", 4),
+    ),
+}
 
 
 def _norm_host(code: str | None) -> str:
@@ -60,27 +92,33 @@ class DashboardShortcutService:
         return leaves
 
     async def ensure_defaults(self) -> None:
-        result = await self.session.execute(
-            select(DashboardShortcut.id).where(DashboardShortcut.user_id.is_(None)).limit(1)
-        )
-        if result.scalar_one_or_none():
-            return
-        any_row = await self.session.execute(select(DashboardShortcut.id).limit(1))
-        if any_row.scalar_one_or_none():
-            return
-        for code, label, desc, order in DEFAULT_SHORTCUTS:
-            self.session.add(
-                DashboardShortcut(
-                    user_id=None,
-                    host_code=DEFAULT_HOST,
-                    module_code=code,
-                    button_label=label,
-                    description=desc,
-                    sort_order=order,
-                    is_active=True,
+        seeded = False
+        for host, items in HOST_DEFAULT_SHORTCUTS.items():
+            result = await self.session.execute(
+                select(DashboardShortcut.id)
+                .where(
+                    DashboardShortcut.user_id.is_(None),
+                    DashboardShortcut.host_code == host,
                 )
+                .limit(1)
             )
-        await self.session.flush()
+            if result.scalar_one_or_none():
+                continue
+            for code, label, desc, order in items:
+                self.session.add(
+                    DashboardShortcut(
+                        user_id=None,
+                        host_code=host,
+                        module_code=code,
+                        button_label=label,
+                        description=desc,
+                        sort_order=order,
+                        is_active=True,
+                    )
+                )
+            seeded = True
+        if seeded:
+            await self.session.flush()
 
     async def save_all(self, user: User, data: DashboardShortcutBulkSave) -> list[DashboardShortcutRead]:
         host = _norm_host(data.host_code)

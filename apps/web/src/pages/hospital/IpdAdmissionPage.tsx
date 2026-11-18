@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../api/client'
+import { listAll } from './billing/paged'
 import { PatientLookup } from './billing/PatientLookup'
 import {
   Admission,
@@ -40,11 +41,11 @@ export function IpdAdmissionPage() {
   useEffect(() => {
     void (async () => {
       const [docs, w, deps] = await Promise.all([
-        api.get<Page<Doctor>>('/hospital/doctors', { page: 1, page_size: 200 }),
+        listAll<Doctor>('/hospital/doctors'),
         api.get<Ward[]>('/hospital/wards'),
         api.get<Department[]>('/hospital/departments'),
       ])
-      setDoctors(docs.items || [])
+      setDoctors(docs)
       setWards(w || [])
       setDepartments(deps || [])
       await loadList()

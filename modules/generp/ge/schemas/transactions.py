@@ -15,6 +15,8 @@ class VoucherItemIn(BaseModel):
     mrp: float | None = None
     sale_price: float | None = None
     profit_pct: float | None = None
+    lot_id: str | None = None
+    stock_barcode_id: str | None = None
 
 
 class VoucherPaymentIn(BaseModel):
@@ -55,6 +57,14 @@ class VoucherItemOut(ORMModel):
     mrp: float = 0
     sale_price: float = 0
     profit_pct: float = 0
+    hsn_code: str | None = None
+    lot_id: str | None = None
+    lot_name: str | None = None
+    stock_barcode_id: str | None = None
+    barcode_from: str | None = None
+    barcode_to: str | None = None
+    print_copies: int = 0
+    barcodes: list[dict] = []
 
 
 class VoucherPaymentOut(ORMModel):

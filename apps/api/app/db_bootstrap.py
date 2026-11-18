@@ -18,7 +18,7 @@ def _parse_database_url(raw_url: str) -> tuple[str, int, str, str, str]:
     port = parsed.port or 5432
     user = parsed.username or "postgres"
     password = parsed.password or ""
-    db_name = (parsed.path or "/kramcop").lstrip("/") or "kramcop"
+    db_name = (parsed.path or "/erp_platform").lstrip("/") or "erp_platform"
     return host, port, user, password, db_name
 
 

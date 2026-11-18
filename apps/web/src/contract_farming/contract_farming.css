@@ -66,12 +66,26 @@
   box-shadow: 0 1px 0 rgba(26, 46, 26, 0.04);
 }
 
-.cf-root .row {
+.cf-root .row,
+.cf-root .cf-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   align-items: end;
   margin-bottom: 12px;
+}
+
+.cf-root .cf-bar > * {
+  width: auto;
+  max-width: none;
+  padding-left: 0;
+  padding-right: 0;
+  flex: 1 1 180px;
+}
+
+.cf-root .cf-bar > .btn,
+.cf-root .cf-bar > button {
+  flex: 0 0 auto;
 }
 
 .cf-root .grid2 {
@@ -184,6 +198,15 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--cf-muted);
+}
+
+.cf-root .table-wrap tbody tr {
+  cursor: pointer;
+}
+
+.cf-root .table-wrap tbody tr.selected td,
+.cf-root .table-wrap tbody tr:hover td {
+  background: #f4f8f3;
 }
 
 .cf-root .row-actions {

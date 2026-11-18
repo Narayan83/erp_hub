@@ -55,6 +55,8 @@ export type Product = {
   is_active?: boolean
     is_in_shop?: boolean
     own_barcode?: boolean
+    multi_barcode?: boolean
+    barcode_piece_qty?: number | string | null
     category_name?: string | null
     sub_category_name?: string | null
     gst_name?: string | null
@@ -301,6 +303,8 @@ export type CompanyProfile = {
   sale_rate_source?: 'product_master' | 'fifo' | string
   allow_negative_stock?: boolean
   purchase_bill_parking?: boolean
+  unique_barcode_stock?: boolean
+  lot_enabled?: boolean
   logo_path?: string | null
   logo_url?: string | null
 }
@@ -335,6 +339,16 @@ export type BillLine = {
   gst_rate: number
   tax_slabs?: TaxSlab[] | null
   stock?: number
+  hsn_code?: string | null
+  lot_id?: string | null
+  lot_name?: string | null
+  multi_barcode?: boolean
+  pieces_per_barcode?: number
+  stock_barcode_id?: string | null
+  barcode_from?: string | null
+  barcode_to?: string | null
+  print_copies?: number
+  barcodes?: { barcode: string; print_copies: number; qty: number }[]
 }
 
 export type VoucherItem = {
@@ -350,6 +364,14 @@ export type VoucherItem = {
   sale_price?: number | string | null
   profit_pct?: number | string | null
   max_discount_pct?: number | string | null
+  hsn_code?: string | null
+  lot_id?: string | null
+  lot_name?: string | null
+  stock_barcode_id?: string | null
+  barcode_from?: string | null
+  barcode_to?: string | null
+  print_copies?: number
+  barcodes?: { barcode: string; print_copies: number; qty: number }[]
 }
 
 export type VoucherPayment = {
@@ -372,6 +394,14 @@ export type Voucher = {
   is_parked?: boolean
   items?: VoucherItem[]
   payments?: VoucherPayment[]
+}
+
+export type Lot = {
+  id: string
+  code: string
+  name: string
+  remarks?: string | null
+  is_active?: boolean
 }
 
 export type Branch = {

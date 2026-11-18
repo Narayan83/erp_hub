@@ -153,6 +153,12 @@ class ShortBillService:
         await self.session.delete(menu)
 
     async def _unique_menu_code(self, name: str, requested: str | None) -> str:
+        # An explicit code (ambulance, medical_gas, …) is the sidebar menu this
+        # bill type belongs to. Keep it when no other type already uses it,
+        # even if that menu row already exists.
+        if requested:
+            if await self.type_repo.get_by_menu_any(requested) is None:
+                return requested[:50]
         slug = re.sub(r"[^a-z0-9]+", "_", (name or "").strip().lower()).strip("_")
         base = (requested or f"sbt_{slug or 'bill'}")[:50]
         candidate = base

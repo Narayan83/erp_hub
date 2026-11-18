@@ -169,7 +169,7 @@ export function MenuOverlayProvider({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return
-      if (document.querySelector('.modal-backdrop')) return
+      if (document.querySelector('.modal-backdrop, .hms-module-popup-back')) return
       if (active === HOME.code) return
       e.preventDefault()
       closeTab(active)

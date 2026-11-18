@@ -1,78 +1,68 @@
-# ERP Platform (monorepo)
+# ERP Platform
 
-One installable ERP with shared **core** and product modules **hospital | generp | lodge | kramcop | contract_farming**.  
-Product is selected by config (`ERP_PRODUCT`), not by separate databases.
+From the repo root (`erp_hub`). Password for every product is `admin123`.
 
-## Folder layout
-
-```
-erp_hub/
-  core/erp_core/          # auth, company, print, party, accounts
-  modules/
-    hospital/             # full HMS (ported from others/hospital)
-    generp/               # trading/stock
-    lodge/                # stub — rooms/stays next
-    kramcop/              # society members, shares, address labels (from others/kramcop)
-    contract_farming/     # multi-project farm accounting (Susthira Balaga / BHP)
-  apps/
-    api/                  # FastAPI entry
-    web/                  # React (Vite) local UI
-  config/products/        # hospital | generp | lodge | kramcop | contract_farming
-  docs/MIGRATION_MAP.md
-  docker-compose.yml      # PostgreSQL
-```
-
-## Prerequisites
-
-- Python 3.12+
-- Node 20+
-- Docker (for Postgres) **or** local PostgreSQL
-
-## Run (first pass)
-
-### 1. Database
-
-```bash
-docker compose up -d
-```
-
-Creates DB `erp_platform` on `localhost:5432` (`postgres` / `postpass`).
-
-### 2. Start (Windows — recommended)
-
-From the repo root (`erp_hub`):
+## Build EXE (client)
 
 ```powershell
-.\run.ps1
+.\scripts\build_hospital_web_exe.ps1
+.\scripts\build_generp_web_exe.ps1
+.\scripts\build_lodge_web_exe.ps1
+.\scripts\build_kramcop_web_exe.ps1
+.\scripts\build_contract_farming_web_exe.ps1
 ```
 
-API + Vite web in a second window:
+| Product | Command | Output |
+|---------|---------|--------|
+| hospital | `.\scripts\build_hospital_web_exe.ps1` | `installer\release\Hospital.exe` |
+| generp | `.\scripts\build_generp_web_exe.ps1` | `installer\release\Generp.exe` |
+| lodge | `.\scripts\build_lodge_web_exe.ps1` | `installer\release\Lodge.exe` |
+| kramcop | `.\scripts\build_kramcop_web_exe.ps1` | `installer\release\Kramcop.exe` |
+| contract_farming | `.\scripts\build_contract_farming_web_exe.ps1` | `installer\release\ContractFarming.exe` |
+
+Skip web rebuild when `apps\web\dist` is already built (any product):
 
 ```powershell
-.\run.ps1 -Web
+.\scripts\build_hospital_web_exe.ps1 -SkipWeb
+.\scripts\build_generp_web_exe.ps1 -SkipWeb
+.\scripts\build_lodge_web_exe.ps1 -SkipWeb
+.\scripts\build_kramcop_web_exe.ps1 -SkipWeb
+.\scripts\build_contract_farming_web_exe.ps1 -SkipWeb
 ```
 
-Switch product for this run (also writes `apps\api\.env`):
+Needs Python 3.12+, Node 20+, and PyInstaller (scripts install PyInstaller into `apps\api\.venv`).
+
+## Run (development)
+
+| Product | Command | Username |
+|---------|---------|----------|
+| hospital | `.\run.ps1 -Product hospital -Web` | `hospital` |
+| generp | `.\run.ps1 -Product generp -Web` | `generp` |
+| lodge | `.\run.ps1 -Product lodge -Web` | `lodge` |
+| kramcop | `.\run.ps1 -Product kramcop -Web` | `kramcop` |
+| contract_farming | `.\run.ps1 -Product contract_farming -Web` | `contract_farming` |
+
+---
+
+One install, five products. Shared **core**, product chosen by `ERP_PRODUCT` (same PostgreSQL database).
+
+## Run a product (development)
+
+Install PostgreSQL 16+ locally first. Create database `erp_platform` (user `postgres` / password `postpass`, or edit `DATABASE_URL` in `apps\api\.env`).
+
+`-Web` opens the React UI in a second window. API only (no Vite window) — drop `-Web`:
 
 ```powershell
 .\run.ps1 -Product hospital
-.\run.ps1 -Product generp -Web
-.\run.ps1 -Product kramcop -Web
-.\run.ps1 -Product contract_farming -Web
 ```
 
-Or double-click `RUN.bat`.
+`.\run.ps1` with no `-Product` keeps whatever is already in `apps\api\.env`. Double-click `RUN.bat` does the same (API only).
 
-> PowerShell older than 7 does not support `&&`. Prefer `.\run.ps1`, or use `;` instead:
-> `cd apps\api; .\.venv\Scripts\Activate.ps1; python run_server.py`
+- Web: http://127.0.0.1:5173
+- Health: http://127.0.0.1:8030/health
+- Docs: http://127.0.0.1:8030/docs
 
-- Health: http://127.0.0.1:8030/health  
-- Docs: http://127.0.0.1:8030/docs  
-- Web: http://127.0.0.1:5173  
-
-Default admin (hospital product): `admin@hospital.example.com` / `admin123`
-
-### 3. Web only (if API already running)
+Web UI alone, when the API is already running:
 
 ```powershell
 cd apps\web
@@ -80,95 +70,108 @@ npm install
 npm run dev
 ```
 
-## Product switching
+PowerShell 5 does not support `&&`. Use `.\run.ps1`, or separate commands with `;`.
 
-Edit `apps/api/.env`:
+---
 
-```env
-ERP_PRODUCT=hospital   # or generp | lodge | kramcop | contract_farming
-```
+## EXE on a client PC
 
-Restart the API. Menus, seed ledgers, and UI labels come from `config/products/<product>.json`.
+PostgreSQL is **not** inside the EXE. Install PostgreSQL 16+ first.
 
-| Product | Modules enabled | Party label |
-|---------|-----------------|-------------|
+1. Copy the product EXE from `installer\release\` anywhere and double-click it.
+2. First run creates `config\<product>.env` next to the EXE and a database named after the product (e.g. `hospital`, `kramcop`) with user `postgres` / password `postpass`. Edit `DATABASE_URL` if the password differs.
+3. Browser opens http://127.0.0.1:8030 — login with that product username / `admin123`.
+4. Logs: `logs\backend.log` next to the EXE.
+
+| Product | EXE | Database | Login |
+|---------|-----|----------|-------|
+| hospital | `Hospital.exe` | `hospital` | `hospital` / `admin123` |
+| generp | `Generp.exe` | `generp` | `generp` / `admin123` |
+| lodge | `Lodge.exe` | `lodge` | `lodge` / `admin123` |
+| kramcop | `Kramcop.exe` | `kramcop` | `kramcop` / `admin123` |
+| contract_farming | `ContractFarming.exe` | `contract_farming` | `contract_farming` / `admin123` |
+
+No dump restore is required — the EXE creates tables on first start.
+
+---
+
+## What each product loads
+
+`-Product` writes `ERP_PRODUCT` in `apps\api\.env`. Restart the API after a change. Menus and labels come from `config/products/<product>.json`.
+
+| Product | Modules | Party label |
+|---------|---------|-------------|
 | hospital | core + hospital | Patient |
 | generp | core + generp | Customer |
 | lodge | core + lodge | Guest |
-| kramcop | core + kramcop | Party (members, shares, and labels are the Kramcop screens) |
-| contract_farming | core + contract_farming | Partner (projects, phases, labour, vendors, farm ledgers) |
+| kramcop | core + kramcop | Party |
+| contract_farming | core + contract_farming | Partner |
 
-One PostgreSQL database per customer install; module tables live in the same schema.
+One PostgreSQL database per install (`erp_platform` in development). Tables are split by schema for clarity:
 
-## Packaged Kramcop EXE (client PC, no Docker)
+| Schema | Contents |
+|--------|----------|
+| `core` | Shared auth, company, party, ledgers, cashbook, menus |
+| `hospital` | Hospital / HMS tables |
+| `generp` | GenERP tables |
+| `lodge` | Lodge tables (when added) |
+| `kramcop` | Kramcop tables |
+| `contract_farming` | Contract farming tables |
 
-Same approach as GenERP: one EXE = API + built React web. **PostgreSQL is installed separately** (not bundled).
+Created automatically on API / EXE startup. Existing `public` tables are moved into these schemas on first run after upgrade.
 
-### Build (on your machine)
+Kramcop first start imports `modules/kramcop/data/kram.xlsx` when that file is present. Contract farming seeds from the Excel sheets under `modules/contract_farming/data/`.
 
-```powershell
-.\scripts\build_kramcop_web_exe.ps1
+You can also set the product by hand:
+
+```env
+ERP_PRODUCT=hospital
 ```
 
-Output: `installer\release\Kramcop.exe`
+Allowed values: `hospital`, `generp`, `lodge`, `kramcop`, `contract_farming`.
 
-Needs: Python 3.12+, Node 20+, and PyInstaller (installed by the script into `apps\api\.venv`).
+---
 
-### Client PC
+## Folder layout
 
-1. Install **PostgreSQL** (16+). Default config expects user `postgres` / password `postpass`, database `kramcop` (created automatically on first start).
-2. Copy `Kramcop.exe` anywhere → double-click.
-3. First run creates `config\kramcop.env` next to the EXE — edit `DATABASE_URL` if your Postgres password differs.
-4. Browser opens `http://127.0.0.1:8030`
-5. Login: `admin@kramcop.example.com` / `admin123`
+```
+erp_hub/
+  core/erp_core/          # auth, company, print, party, accounts
+  modules/
+    hospital/
+    generp/
+    lodge/
+    kramcop/
+    contract_farming/
+  apps/
+    api/                  # FastAPI
+    web/                  # React (Vite)
+  config/products/        # one JSON per product
+  scripts/
+    build_hospital_web_exe.ps1
+    build_generp_web_exe.ps1
+    build_lodge_web_exe.ps1
+    build_kramcop_web_exe.ps1
+    build_contract_farming_web_exe.ps1
+```
 
-Logs: `logs\backend.log` next to the EXE.
+## Prerequisites
+
+- Python 3.12+
+- Node 20+
+- PostgreSQL 16+ (local install)
 
 ## Stack
 
 - PostgreSQL
 - FastAPI + SQLAlchemy (async) + Alembic
-- React + Vite (dev UI, or packaged inside `Kramcop.exe`)
+- React + Vite (dev UI, or packaged inside each product EXE)
 
-## Migration order
-
-1. Skeleton + **Hospital** main flows (this pass)
-2. **GenERP** trading/stock into `modules/generp`
-3. **Lodge** rooms/stays into `modules/lodge`
-
-See [docs/MIGRATION_MAP.md](docs/MIGRATION_MAP.md).
-
-## Source apps (read-only references)
+## Source apps (read-only)
 
 - `D:\fullstack\others\hospital`
 - `D:\fullstack\others\generp`
 - `D:\fullstack\others\lodge`
 - `D:\fullstack\others\kramcop`
 
-
-.\run.ps1 -Product generp -Web
-
-admin@generp.example.com
-admin123
-
-Kramcop (society members and shares):
-
-```powershell
-.\run.ps1 -Product kramcop -Web
-```
-
-admin@kramcop.example.com / admin123
-
-Login, users, company, and accounts are the shared platform screens. Customer master, share entry, labels, and the Kannada society master come from Kramcop. The first start imports `modules/kramcop/data/kram.xlsx` when that file is present.
-
-### Contract Farming
-
-Multi-project contract farming (partners, locations, phases, work types, labour, vendors, ledgers, payment modes with credit/debit, transactions, reports & charts). Seeded from Susthira Balaga Balleruhundi Phase 6 & 7 Excel sheets under `modules/contract_farming/data/`.
-
-```powershell
-.\run.ps1 -Product contract_farming -Web
-```
-
-Login: `admin@contract_farming.example.com` / `admin123`
-
-Uses the same Postgres DB as the other products (`erp_platform` in `apps/api/.env`). Only `ERP_PRODUCT` changes when you run `.\run.ps1 -Product …`.
+See [docs/MIGRATION_MAP.md](docs/MIGRATION_MAP.md).

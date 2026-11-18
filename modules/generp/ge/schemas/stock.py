@@ -25,6 +25,7 @@ class StockVoucherItemIn(BaseModel):
     unit: str | None = None
     rate: float = 0
     narration: str | None = None
+    lot_id: str | None = None
 
 
 class StockVoucherIn(BaseModel):
@@ -218,3 +219,96 @@ class DiscountApplyOut(BaseModel):
     scheme_name: str | None = None
     discount_amount: float
     discount_pct: float = 0
+
+
+class LotIn(BaseModel):
+    code: str
+    name: str
+    remarks: str | None = None
+    is_active: bool = True
+
+
+class LotOut(LotIn):
+    id: str
+
+
+class StockBarcodeHit(BaseModel):
+    id: str
+    barcode: str
+    product_id: str
+    product_code: str | None = None
+    product_name: str | None = None
+    qty_remaining: float = 0
+    qty_in: float = 0
+    ask_qty: bool = False
+    sale_rate: float = 0
+    mrp: float = 0
+    cost_price: float = 0
+    status: str = "in_stock"
+    lot_id: str | None = None
+    lot_name: str | None = None
+    multi_barcode: bool = False
+
+
+class BarcodeStockRow(BaseModel):
+    date: date
+    lot_name: str = ""
+    product_name: str = ""
+    product_code: str = ""
+    barcode: str
+    cost_price: float = 0
+    sale_rate: float | None = None
+    disc_pct: float | None = None
+    net_sale_rate: float | None = None
+    qty: float = 0
+    status: str = "in_stock"
+
+
+class BarcodeStockReport(BaseModel):
+    rows: list[BarcodeStockRow] = []
+    purchase_value: float = 0
+    sales_value: float = 0
+    margin: float = 0
+    margin_pct: float | None = None
+
+
+class ItemStockRow(BaseModel):
+    product_id: str
+    product_code: str = ""
+    product_name: str = ""
+    barcode_count: int = 0
+    qty_in: float = 0
+    qty_sold: float = 0
+    qty_remaining: float = 0
+    purchase_value: float = 0
+    sales_value: float = 0
+    balance_value: float = 0
+
+
+class MovementStockRow(BaseModel):
+    lot_name: str = ""
+    lot_code: str = ""
+    date: date | None = None
+    product_code: str = ""
+    product_name: str = ""
+    p_qty: float = 0
+    p_rate: float = 0
+    p_amt: float = 0
+    pr_qty: float = 0
+    pr_rate: float = 0
+    pr_amt: float = 0
+    s_qty: float = 0
+    s_rate: float = 0
+    s_amt: float = 0
+    sr_qty: float = 0
+    sr_rate: float = 0
+    sr_amt: float = 0
+    ti_qty: float = 0
+    ti_rate: float = 0
+    ti_amt: float = 0
+    to_qty: float = 0
+    to_rate: float = 0
+    to_amt: float = 0
+    bal_qty: float = 0
+    bal_rate: float = 0
+    bal_amt: float = 0

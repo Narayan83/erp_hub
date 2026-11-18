@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.api.deps import get_current_user, get_session
 from erp_core.models.auth import User
-from erp_core.product_config import get_product_name, load_product_config
+from erp_core.product_config import get_product_name, load_product_config, present_user_full_name
 from erp_core.schemas.auth import LoginRequest, LoginResponse, TokenRefreshResponse, UserInfo
 from erp_core.security import create_access_token
 from erp_core.services.auth import AuthService
@@ -41,7 +41,7 @@ async def me(user: User = Depends(get_current_user)):
         id=user.id,
         username=user.username,
         email=user.email,
-        full_name=user.full_name,
+        full_name=present_user_full_name(user.full_name),
         phone=user.phone,
         roles=roles,
     )
@@ -60,10 +60,12 @@ async def product_info():
     product = get_product_name()
     admin = cfg.get("default_admin") or {}
     default_email = str(admin.get("email") or f"admin@{product}.example.com").lower()
+    default_username = str(admin.get("username") or product).strip().lower() or product
     return {
         "product": product,
         "display_name": cfg.get("display_name"),
         "modules": cfg.get("modules"),
         "labels": cfg.get("labels"),
         "default_admin_email": default_email,
+        "default_admin_username": default_username,
     }

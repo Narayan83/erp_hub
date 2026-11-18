@@ -103,10 +103,65 @@ class StockVoucherItem(Base, TimestampMixin):
     rate: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
     amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
     narration: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lot_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True, index=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     voucher: Mapped["StockVoucher"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship("Product")
+
+
+class LotMaster(Base, TimestampMixin):
+    """Named lot (NT 01, PU 01) chosen on purchase when lots are enabled."""
+
+    __tablename__ = "lot_masters"
+
+    id: Mapped[str] = _pk()
+    code: Mapped[str] = mapped_column(String(30), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    remarks: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class StockBarcode(Base, TimestampMixin):
+    """One inward barcode. Unique pieces have qty 1; a multi barcode holds many pieces."""
+
+    __tablename__ = "stock_barcodes"
+
+    id: Mapped[str] = _pk()
+    barcode: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    product_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("products.id"), index=True
+    )
+    lot_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True, index=True)
+    voucher_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True, index=True)
+    voucher_item_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True, index=True)
+    supplier_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True, index=True)
+    inward_date: Mapped[date] = mapped_column(Date, index=True)
+    qty_in: Mapped[float] = mapped_column(Numeric(14, 3), default=0)
+    qty_remaining: Mapped[float] = mapped_column(Numeric(14, 3), default=0)
+    cost_price: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    sale_rate: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    mrp: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    disc_pct: Mapped[float] = mapped_column(Numeric(8, 2), default=0)
+    # in_stock | sold | transferred | returned
+    status: Mapped[str] = mapped_column(String(20), default="in_stock", index=True)
+    print_copies: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class StockBarcodeMove(Base, TimestampMixin):
+    """Qty taken from or put back on a stock barcode. Reversed when a bill is edited."""
+
+    __tablename__ = "stock_barcode_moves"
+
+    id: Mapped[str] = _pk()
+    stock_barcode_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("stock_barcodes.id"), index=True
+    )
+    qty_delta: Mapped[float] = mapped_column(Numeric(14, 3), default=0)
+    reason: Mapped[str] = mapped_column(String(30), default="SALE")
+    voucher_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True, index=True)
+    voucher_item_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    stock_voucher_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True, index=True)
 
 
 class StockLot(Base, TimestampMixin):

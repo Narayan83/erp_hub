@@ -5,6 +5,8 @@ export type BarcodeBatchSeedItem = {
   qty: number
   name?: string | null
   code?: string | null
+  /** Issued stock barcode. When set, the label prints this value instead of the product barcode. */
+  barcode?: string | null
 }
 
 export type BarcodeBatchSeed = {
