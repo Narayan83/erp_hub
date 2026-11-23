@@ -13,7 +13,7 @@ PrintMode = Literal["preview", "direct"]
 
 
 class PrintConfigCreate(BaseModel):
-    code: str = Field(..., min_length=1, max_length=40)
+    code: str = Field(..., min_length=1, max_length=80)
     name: str = Field(..., min_length=2, max_length=200)
     printer_name: str | None = Field(None, max_length=300)
     paper_size: PaperSize = "A4"
@@ -60,6 +60,7 @@ class PrintConfigRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    product: str | None = None
     code: str
     name: str
     printer_name: str | None

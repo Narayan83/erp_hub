@@ -4,7 +4,10 @@ import { api } from '../../../api/client'
 import {
   HospitalMenu,
   HospitalShortcut,
+  SHORTCUT_MENUS_API,
+  SHORTCUTS_API,
   notifyHospitalShortcutsChanged,
+  shortcutButtonName,
 } from '../shortcuts'
 import '../billing/hms-master.css'
 
@@ -55,19 +58,20 @@ export function DashboardShortcutPage({ initialHost }: { initialHost?: string } 
     () => menus.filter((menu) => menu.code !== hostCode && !used.has(menu.code)),
     [menus, used, hostCode],
   )
+  const hostMenu = hosts.find((menu) => menu.code === hostCode)
   const hostLabel =
     hostCode === 'dashboard'
       ? 'Dashboard'
-      : hosts.find((menu) => menu.code === hostCode)?.label || hostCode.replace(/_/g, ' ')
+      : hostMenu?.picker_label || hostMenu?.label || hostCode.replace(/_/g, ' ')
 
   const load = useCallback(async () => {
     setBusy(true)
     setError(null)
     try {
       const [available, hostMenus, shortcuts] = await Promise.all([
-        api.get<HospitalMenu[]>('/hospital/dashboard/shortcut-menus', { host_code: hostCode }),
-        api.get<HospitalMenu[]>('/hospital/dashboard/shortcut-menus', { host_code: 'dashboard' }),
-        api.get<HospitalShortcut[]>('/hospital/dashboard/shortcuts', {
+        api.get<HospitalMenu[]>(SHORTCUT_MENUS_API, { host_code: hostCode }),
+        api.get<HospitalMenu[]>(SHORTCUT_MENUS_API, { host_code: 'dashboard' }),
+        api.get<HospitalShortcut[]>(SHORTCUTS_API, {
           active_only: false,
           host_code: hostCode,
         }),
@@ -95,7 +99,7 @@ export function DashboardShortcutPage({ initialHost }: { initialHost?: string } 
     setError(null)
     setOk(null)
     try {
-      const saved = await api.put<HospitalShortcut[]>('/hospital/dashboard/shortcuts', {
+      const saved = await api.put<HospitalShortcut[]>(SHORTCUTS_API, {
         host_code: hostCode,
         items: next.map((row, index) => ({
           module_code: row.module_code,
@@ -122,7 +126,7 @@ export function DashboardShortcutPage({ initialHost }: { initialHost?: string } 
       setError('Select a menu to add')
       return
     }
-    const label = customName.trim() || menu.label
+    const label = customName.trim() || shortcutButtonName(menu)
     const next = [
       ...rows,
       {
@@ -181,7 +185,7 @@ export function DashboardShortcutPage({ initialHost }: { initialHost?: string } 
           <option value="dashboard">Dashboard</option>
           {hosts.map((menu) => (
             <option key={menu.code} value={menu.code}>
-              {menu.label}
+              {menu.picker_label || menu.label}
             </option>
           ))}
         </select>
@@ -206,13 +210,13 @@ export function DashboardShortcutPage({ initialHost }: { initialHost?: string } 
               const code = e.target.value
               setPick(code)
               const menu = unused.find((item) => item.code === code)
-              setCustomName(menu?.label || '')
+              setCustomName(menu ? shortcutButtonName(menu) : '')
             }}
           >
             <option value="">Select menu</option>
             {unused.map((menu) => (
               <option key={menu.code} value={menu.code}>
-                {menu.label}
+                {menu.picker_label || menu.label}
               </option>
             ))}
           </select>

@@ -8,7 +8,10 @@ import {
   HospitalMenu,
   HospitalShortcut,
   SHORTCUT_HIDDEN_HOSTS,
+  SHORTCUT_MENUS_API,
+  SHORTCUTS_API,
   notifyHospitalShortcutsChanged,
+  shortcutButtonName,
 } from './shortcuts'
 import {
   HospitalModulePopupStack,
@@ -36,9 +39,22 @@ function readCollapsed(): boolean {
   }
 }
 
-export function HospitalShortcutBar() {
+type HospitalShortcutBarProps = {
+  /** When set (e.g. inside a module popup), load shortcuts for this host instead of the route. */
+  hostCode?: string
+  /** Nested bars push onto the parent popup stack instead of owning their own. */
+  onOpenPopup?: (moduleCode: string, title?: string, search?: string) => void
+  /** Hide the page-title header chrome when embedded in a popup. */
+  embedded?: boolean
+}
+
+export function HospitalShortcutBar({
+  hostCode: hostOverride,
+  onOpenPopup,
+  embedded = false,
+}: HospitalShortcutBarProps = {}) {
   const { code } = useParams()
-  const host = (code || 'dashboard').trim().toLowerCase() || 'dashboard'
+  const host = (hostOverride || code || 'dashboard').trim().toLowerCase() || 'dashboard'
   const hidden = SHORTCUT_HIDDEN_HOSTS.has(host)
   const { menus: authMenus } = useAuth()
   const pageTitle =
@@ -60,6 +76,10 @@ export function HospitalShortcutBar() {
   function openShortcutPopup(moduleCode: string, title?: string, search?: string) {
     const next = newHospitalPopupLayer(moduleCode, title, search)
     if (!next.code || next.code === host) return
+    if (onOpenPopup) {
+      onOpenPopup(next.code, next.title, next.search)
+      return
+    }
     setPopups((prev) => [...prev, next])
   }
 
@@ -67,15 +87,25 @@ export function HospitalShortcutBar() {
     setPopups((prev) => prev.slice(0, -1))
   }
 
+  function appendPopup(moduleCode: string, title?: string, search?: string) {
+    const next = newHospitalPopupLayer(moduleCode, title, search)
+    if (!next.code) return
+    setPopups((prev) => {
+      const top = prev[prev.length - 1]
+      if (top && top.code === next.code) return prev
+      return [...prev, next]
+    })
+  }
+
   const load = useCallback(async () => {
     if (hidden) return
     try {
       const [rows, available] = await Promise.all([
-        api.get<HospitalShortcut[]>('/hospital/dashboard/shortcuts', {
+        api.get<HospitalShortcut[]>(SHORTCUTS_API, {
           active_only: true,
           host_code: host,
         }),
-        api.get<HospitalMenu[]>('/hospital/dashboard/shortcut-menus', { host_code: host }),
+        api.get<HospitalMenu[]>(SHORTCUT_MENUS_API, { host_code: host }),
       ])
       setShortcuts((rows || []).filter((row) => row.is_active && !row.module_code.startsWith('_')))
       setMenus(available || [])
@@ -124,7 +154,7 @@ export function HospitalShortcutBar() {
     setBusy(true)
     setError('')
     try {
-      await api.post<HospitalShortcut>('/hospital/dashboard/shortcuts', {
+      await api.post<HospitalShortcut>(SHORTCUTS_API, {
         host_code: host,
         module_code: menu.code,
         button_label,
@@ -148,7 +178,7 @@ export function HospitalShortcutBar() {
     setBusy(true)
     setError('')
     try {
-      await api.delete(`/hospital/dashboard/shortcuts/${row.id}`)
+      await api.delete(`${SHORTCUTS_API}/${row.id}`)
       if (editingId === row.id) {
         setEditingId(null)
         setEditLabel('')
@@ -177,7 +207,7 @@ export function HospitalShortcutBar() {
     setBusy(true)
     setError('')
     try {
-      await api.post<HospitalShortcut>('/hospital/dashboard/shortcuts', {
+      await api.post<HospitalShortcut>(SHORTCUTS_API, {
         host_code: host,
         module_code: row.module_code,
         button_label,
@@ -197,16 +227,26 @@ export function HospitalShortcutBar() {
   }
 
   return (
-    <div className={`hms-shortcut-bar${collapsed ? ' is-collapsed' : ''}`} role="navigation" aria-label="Menu shortcuts">
+    <div
+      className={`hms-shortcut-bar${collapsed ? ' is-collapsed' : ''}${embedded ? ' is-embedded' : ''}`}
+      role="navigation"
+      aria-label="Menu shortcuts"
+    >
       <div className="hms-shortcut-header">
-        <span className="hms-shortcut-page-title" title={pageTitle}>
-          {pageTitle}
-        </span>
+        {!embedded ? (
+          <span className="hms-shortcut-page-title" title={pageTitle}>
+            {pageTitle}
+          </span>
+        ) : (
+          <span className="hms-shortcut-page-title" title={pageTitle}>
+            {pageTitle} shortcuts
+          </span>
+        )}
         <button
           type="button"
           className="hms-shortcut-toggle"
           aria-expanded={!collapsed}
-          aria-controls="hms-shortcut-body"
+          aria-controls={`hms-shortcut-body-${host}`}
           title={collapsed ? 'Expand shortcuts' : 'Collapse shortcuts'}
           onClick={toggleCollapsed}
         >
@@ -228,7 +268,7 @@ export function HospitalShortcutBar() {
       </div>
 
       {!collapsed ? (
-        <div id="hms-shortcut-body" className="hms-shortcut-body">
+        <div id={`hms-shortcut-body-${host}`} className="hms-shortcut-body">
           {shortcuts.length === 0 ? <span className="hms-shortcut-empty">No shortcuts on this screen</span> : null}
           {shortcuts.map((row) => (
             <span key={row.id} className="hms-shortcut-chip">
@@ -291,13 +331,13 @@ export function HospitalShortcutBar() {
               const next = e.target.value
               setPick(next)
               const menu = unused.find((item) => item.code === next)
-              setCustomName(menu?.label || '')
+              setCustomName(menu ? shortcutButtonName(menu) : '')
             }}
           >
             <option value="">Add shortcut…</option>
             {unused.map((menu) => (
               <option key={menu.code} value={menu.code}>
-                {menu.label}
+                {menu.picker_label || menu.label}
               </option>
             ))}
           </select>
@@ -330,7 +370,9 @@ export function HospitalShortcutBar() {
           {error ? <span className="hms-shortcut-error">{error}</span> : null}
         </div>
       ) : null}
-      <HospitalModulePopupStack layers={popups} onCloseTop={closeTopPopup} />
+      {!onOpenPopup ? (
+        <HospitalModulePopupStack layers={popups} onCloseTop={closeTopPopup} onOpenPopup={appendPopup} />
+      ) : null}
     </div>
   )
 }

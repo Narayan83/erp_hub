@@ -32,7 +32,6 @@ MENU_DEFINITIONS = [
     ("print_template_designer", "Bill Template Designer", "masters", 40, None, None, None),
     ("service_groups", "Service Groups", "masters", 40, 88, 'CMASTER', 'SG'),
     ("assign_services_to_group", "Assign Services To Group", "masters", 41, 89, 'SRGROUP', None),
-    ("service_category_master", "Service Category Master", "billing_setup", 1, 90, 'CMASTER', 'SM'),
     ("service_sub_category_master", "Service Sub Category Master", "billing_setup", 2, None, 'CMASTER', 'SSC'),
     ("package_creation_master", "Package Creation Master", "billing_setup", 3, 91, 'CMASTER', 'PC'),
     ("assign_services_to_package", "Assign Services To Package", "billing_setup", 4, 92, 'PCGROUP', None),

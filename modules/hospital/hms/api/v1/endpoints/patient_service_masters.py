@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules.hospital.hms.api.deps import get_current_user, get_session
 from modules.hospital.hms.models.user import User
 from modules.hospital.hms.schemas.patient_service_master import (
+    PatientServiceImportResult,
     PatientServiceMasterCreate,
     PatientServiceMasterRead,
     PatientServiceMasterUpdate,
 )
+from modules.hospital.hms.services.patient_service_import import build_patient_service_template
 from modules.hospital.hms.services.patient_service_master import PatientServiceMasterService
 
 router = APIRouter()
@@ -19,6 +22,26 @@ async def list_patient_services(
     session: AsyncSession = Depends(get_session),
 ):
     return await PatientServiceMasterService(session).list_services()
+
+
+@router.get("/import-template")
+async def download_patient_service_template(_: User = Depends(get_current_user)):
+    content = build_patient_service_template()
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="patient-service-template.xlsx"'},
+    )
+
+
+@router.post("/import", response_model=PatientServiceImportResult)
+async def import_patient_services(
+    file: UploadFile = File(...),
+    _: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    raw = await file.read()
+    return await PatientServiceMasterService(session).import_file(raw, file.filename or "services.xlsx")
 
 
 @router.get("/{service_id}", response_model=PatientServiceMasterRead)

@@ -32,7 +32,7 @@ router = APIRouter()
 
 async def list_billing_services(
 
-    category_id: str | None = Query(None),
+    group_id: str | None = Query(None),
 
     sub_category_id: str | None = Query(None),
 
@@ -46,7 +46,7 @@ async def list_billing_services(
 
     return await IpdDischargeService(session).list_catalog(
 
-        category_id=category_id,
+        group_id=group_id,
 
         sub_category_id=sub_category_id,
 

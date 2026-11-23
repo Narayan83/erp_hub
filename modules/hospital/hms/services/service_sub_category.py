@@ -2,7 +2,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules.hospital.hms.models.service_sub_category import ServiceSubCategory
-from modules.hospital.hms.repositories.service_category import ServiceCategoryRepository
+from modules.hospital.hms.repositories.service_group import ServiceGroupRepository
 from modules.hospital.hms.repositories.service_sub_category import ServiceSubCategoryRepository
 from modules.hospital.hms.schemas.service_sub_category import (
     ServiceSubCategoryCreate,
@@ -14,7 +14,7 @@ from modules.hospital.hms.schemas.service_sub_category import (
 class ServiceSubCategoryService:
     def __init__(self, session: AsyncSession):
         self.repo = ServiceSubCategoryRepository(session)
-        self.category_repo = ServiceCategoryRepository(session)
+        self.category_repo = ServiceGroupRepository(session)
 
     def _to_read(self, item: ServiceSubCategory) -> ServiceSubCategoryRead:
         read = ServiceSubCategoryRead.model_validate(item)

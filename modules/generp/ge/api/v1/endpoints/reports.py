@@ -50,8 +50,15 @@ def _report_code_for_voucher(voucher) -> str:
 
 
 async def _load_layout_options(session: AsyncSession, code: str) -> dict | None:
+    from erp_core.product_config import get_product_name
+
     obj = (
-        await session.execute(select(PrintConfig).where(PrintConfig.code == code.upper()))
+        await session.execute(
+            select(PrintConfig).where(
+                PrintConfig.product == get_product_name(),
+                PrintConfig.code == code.upper(),
+            )
+        )
     ).scalar_one_or_none()
     return obj.layout_options if obj else None
 
@@ -68,17 +75,29 @@ async def _sale_bill_html_response(session: AsyncSession, voucher, requested_for
     context = await _company_report_context(session, build_sale_bill_context(voucher))
     context = apply_bill_format(context, bill_format)
     report_code = _report_code_for_voucher(voucher)
-    try:
-        layout_raw = await _load_layout_options(session, report_code)
-        html = render_document_html(
-            code=report_code,
-            context=context,
-            layout_raw=layout_raw,
-            bill_format=bill_format,
-        )
-    except Exception:
-        logger.exception("Layout render failed for %s, falling back to template", report_code)
-        html = _report_service().render_html(template, context, bill_format=bill_format)
+
+    async def _generp_or_template() -> str:
+        try:
+            layout_raw = await _load_layout_options(session, report_code)
+            return render_document_html(
+                code=report_code,
+                context=context,
+                layout_raw=layout_raw,
+                bill_format=bill_format,
+            )
+        except Exception:
+            logger.exception("Layout render failed for %s, falling back to template", report_code)
+            return _report_service().render_html(template, context, bill_format=bill_format)
+
+    # Prefer platform designed sheets (Print Master / Bill Template Designer) when present.
+    from erp_core.services.designed_print import render_designed_or_fallback
+
+    html = await render_designed_or_fallback(
+        session,
+        code=report_code,
+        context=context,
+        fallback_html=_generp_or_template,
+    )
     return HTMLResponse(content=html)
 
 
@@ -454,17 +473,29 @@ async def daily_collection_html(
         session, day=day, date_from=date_from, date_to=date_to, bill_from=bill_from, bill_to=bill_to
     )
     context = await _company_report_context(session, data)
-    try:
-        layout_raw = await _load_layout_options(session, "DAILY_COLLECTION_REPORT")
-        html = render_document_html(
-            code="DAILY_COLLECTION_REPORT",
-            context=context,
-            layout_raw=layout_raw,
-            bill_format="A4",
-        )
-    except Exception:
-        logger.exception("Layout render failed for daily collection, falling back to template")
-        html = _report_service().render_html("daily_collection.html", context)
+    report_code = "DAILY_COLLECTION_REPORT"
+
+    async def _generp_or_template() -> str:
+        try:
+            layout_raw = await _load_layout_options(session, report_code)
+            return render_document_html(
+                code=report_code,
+                context=context,
+                layout_raw=layout_raw,
+                bill_format="A4",
+            )
+        except Exception:
+            logger.exception("Layout render failed for daily collection, falling back to template")
+            return _report_service().render_html("daily_collection.html", context)
+
+    from erp_core.services.designed_print import render_designed_or_fallback
+
+    html = await render_designed_or_fallback(
+        session,
+        code=report_code,
+        context=context,
+        fallback_html=_generp_or_template,
+    )
     return HTMLResponse(content=html)
 
 

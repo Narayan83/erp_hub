@@ -116,24 +116,19 @@ export function isSmallPaper(paperW: number, paperH: number): boolean {
   return paperW <= 100 || paperH <= 120
 }
 
-/** Paper size in mm for a page code, with orientation applied. */
+/** Paper size in mm. Custom pages use the millimetres you saved. A stock size turns sideways when set to landscape. */
 export function paperMm(
   layout: Layout | null | undefined,
   format: string,
-  orientation: string,
+  orientation?: string,
   fallbackPages?: Record<string, { width_mm?: number; height_mm?: number }>,
 ): [number, number] {
   const code = String(format || 'A4').toUpperCase()
   const page = layout?.custom_pages?.[format] || fallbackPages?.[format]
-  let w: number
-  let h: number
-  if (page) {
-    w = Number(page.width_mm) || 210
-    h = Number(page.height_mm) || 297
-  } else {
-    ;[w, h] = STANDARD_PAGE_MM[code] || STANDARD_PAGE_MM.A4
-  }
-  return orientation === 'landscape' ? [h, w] : [w, h]
+  if (page) return [Number(page.width_mm) || 210, Number(page.height_mm) || 297]
+  const [w, h] = STANDARD_PAGE_MM[code] || STANDARD_PAGE_MM.A4
+  if (orientation === 'landscape') return [h, w]
+  return [w, h]
 }
 
 /* ───────────────────────── default font / box sizes ───────────────────────── */

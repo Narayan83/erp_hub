@@ -19,7 +19,7 @@ export function ServiceCatalogPanel({ catalog, lines, onChange }: Props) {
       (s) =>
         s.name.toLowerCase().includes(q) ||
         s.code.toLowerCase().includes(q) ||
-        (s.category_name || '').toLowerCase().includes(q),
+        (s.group_name || '').toLowerCase().includes(q),
     )
   }, [catalog, search])
 
@@ -36,7 +36,7 @@ export function ServiceCatalogPanel({ catalog, lines, onChange }: Props) {
           service_id: s.id,
           service_code: s.code,
           service_name: s.name,
-          category_name: s.category_name,
+          category_name: s.group_name,
           quantity: 1,
           rate: money(s.rate),
         })
@@ -95,8 +95,8 @@ export function ServiceCatalogPanel({ catalog, lines, onChange }: Props) {
                     </td>
                     <td>
                       {s.name}
-                      {s.category_name ? (
-                        <div className="small text-muted">{s.category_name}</div>
+                      {s.group_name ? (
+                        <div className="small text-muted">{s.group_name}</div>
                       ) : null}
                     </td>
                     <td>{s.code}</td>

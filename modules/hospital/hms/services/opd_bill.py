@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from modules.hospital.hms.models.opd_bill import OpdBill, OpdBillLine
 from modules.hospital.hms.models.patient import Patient
 from modules.hospital.hms.models.patient_service_master import PatientServiceMaster
-from modules.hospital.hms.models.service_category import ServiceCategory
+from modules.hospital.hms.models.service_group import ServiceGroup
 from modules.hospital.hms.repositories.cashbook import CashbookRepository
 from modules.hospital.hms.repositories.doctor import DoctorRepository
 from modules.hospital.hms.repositories.opd_bill import OpdBillRepository
@@ -109,14 +109,14 @@ class OpdBillService:
     async def list_catalog(
         self,
         *,
-        category_id: str | None = None,
+        group_id: str | None = None,
         sub_category_id: str | None = None,
         search: str | None = None,
     ) -> list[BillingServiceCatalogItem]:
         stmt = (
             select(PatientServiceMaster)
             .options(
-                selectinload(PatientServiceMaster.category),
+                selectinload(PatientServiceMaster.group),
                 selectinload(PatientServiceMaster.sub_category),
                 selectinload(PatientServiceMaster.doctor),
             )
@@ -125,17 +125,17 @@ class OpdBillService:
         )
         # Pathology services live in their own (LAB) category and are billed from
         # the Pathology Bill screen — never mix them into OPD billing.
-        lab_category_ids = select(ServiceCategory.id).where(
-            ServiceCategory.code == self.PATHOLOGY_CATEGORY_CODE
+        lab_group_ids = select(ServiceGroup.id).where(
+            ServiceGroup.code == self.PATHOLOGY_CATEGORY_CODE
         )
         stmt = stmt.where(
             or_(
-                PatientServiceMaster.category_id.is_(None),
-                PatientServiceMaster.category_id.notin_(lab_category_ids),
+                PatientServiceMaster.group_id.is_(None),
+                PatientServiceMaster.group_id.notin_(lab_group_ids),
             )
         )
-        if category_id:
-            stmt = stmt.where(PatientServiceMaster.category_id == category_id)
+        if group_id:
+            stmt = stmt.where(PatientServiceMaster.group_id == group_id)
         if sub_category_id:
             stmt = stmt.where(PatientServiceMaster.sub_category_id == sub_category_id)
         if search:
@@ -158,8 +158,8 @@ class OpdBillService:
                     is_sharing=row.is_sharing,
                     doctor_id=row.doctor_id,
                     doctor_name=row.doctor.full_name if row.doctor else None,
-                    category_id=row.category_id,
-                    category_name=row.category.name if row.category else None,
+                    group_id=row.group_id,
+                    group_name=row.group.name if row.group else None,
                     sub_category_id=row.sub_category_id,
                     sub_category_name=row.sub_category.name if row.sub_category else None,
                     is_renewal=row.is_renewal,
@@ -196,7 +196,7 @@ class OpdBillService:
             service_id=service.id,
             service_code=service.code,
             service_name=line_name,
-            category_name=service.category.name if service.category else None,
+            category_name=service.group.name if service.group else None,
             sub_category_name=service.sub_category.name if service.sub_category else None,
             rate=rate,
             quantity=entry.quantity,

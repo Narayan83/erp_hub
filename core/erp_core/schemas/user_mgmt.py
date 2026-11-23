@@ -40,6 +40,8 @@ class UserOut(ORMModel):
     user_type_id: str | None = None
     user_type_name: str | None = None
     is_active: bool
+    roles: list[str] = []
+    created_at: datetime | None = None
     updated_at: datetime | None = None
 
 

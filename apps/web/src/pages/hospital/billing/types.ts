@@ -27,8 +27,8 @@ export type CatalogService = {
   name: string
   rate: number | string
   service_charge?: number | string
-  category_id?: string | null
-  category_name?: string | null
+  group_id?: string | null
+  group_name?: string | null
   sub_category_name?: string | null
 }
 

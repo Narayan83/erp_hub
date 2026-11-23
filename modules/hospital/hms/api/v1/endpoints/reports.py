@@ -136,14 +136,37 @@ async def _saved_bill_layout(session: AsyncSession, code: str):
 
 async def _stamp_template_page_size(session: AsyncSession, code: str, html: str) -> str:
     """Put the template's selected page size on the report. Do not leave the default A4."""
-    from modules.hospital.hms.reports.page_size_stamp import resolve_print_page_mm, stamp_page_size_attrs
+    from modules.hospital.hms.reports.page_size_stamp import (
+        resolve_print_format,
+        resolve_print_page_mm,
+        stamp_page_size_attrs,
+    )
 
     cfg = await _print_config_or_none(session, code)
     if cfg is None:
         return html
     layout = cfg.layout_options if isinstance(cfg.layout_options, dict) else None
     width, height, orientation = resolve_print_page_mm(cfg, layout)
-    return stamp_page_size_attrs(html, width_mm=width, height_mm=height, orientation=orientation)
+    return stamp_page_size_attrs(
+        html,
+        width_mm=width,
+        height_mm=height,
+        orientation=orientation,
+        paper=resolve_print_format(cfg, layout),
+        code=code,
+    )
+
+
+async def _render_fixed_report(
+    session: AsyncSession,
+    report_service: ReportService,
+    code: str,
+    template_name: str,
+    context: dict,
+) -> str:
+    """Render a fixed report, then put the designer page size on it."""
+    html = report_service.render_html(template_name, context)
+    return await _stamp_template_page_size(session, code, html)
 
 
 async def _render_designed_bill(
@@ -155,38 +178,21 @@ async def _render_designed_bill(
     template_name: str,
     header_name_field: str = "name",
 ) -> str:
+    """Hospital bills use the platform designed-print helper (all products share it)."""
+    from erp_core.services.designed_print import render_designed_or_fallback
     from modules.hospital.hms.reports.page_layout import prepare_report_html
-    from modules.hospital.hms.reports.page_size_stamp import resolve_print_page_mm, stamp_page_size_attrs
 
     ctx = await _report_context(session, base, header_name_field=header_name_field)
-    cfg = await _print_config_or_none(session, code)
-    layout, paper = await _saved_bill_layout(session, code)
-    if layout:
-        from modules.hospital.hms.reports.print_layouts import apply_shared_pages, collect_shared_pages
-        from modules.hospital.hms.services.print_config import PrintConfigService
 
-        saved = await PrintConfigService(session).designed_layout_entries()
-        layout = apply_shared_pages(layout, collect_shared_pages(saved)) or layout
-    if layout:
-        from modules.hospital.hms.reports.layout_render import render_document_html
+    def _builtin() -> str:
+        return prepare_report_html(report_service.render_html(template_name, ctx))
 
-        html = prepare_report_html(
-            render_document_html(code=code, context=ctx, layout_raw=layout, bill_format=paper)
-        )
-    else:
-        html = report_service.render_html(template_name, ctx)
-        html = prepare_report_html(html)
-
-    # Always stamp Print Master / template mm size so preview is never stuck on A4
-    # when only paper_size/custom mm were saved (or designed layout used A4 by mistake).
-    if cfg is not None:
-        width, height, orientation = resolve_print_page_mm(
-            cfg, layout if isinstance(layout, dict) else cfg.layout_options
-        )
-        html = stamp_page_size_attrs(
-            html, width_mm=width, height_mm=height, orientation=orientation
-        )
-    return html
+    return await render_designed_or_fallback(
+        session,
+        code=code,
+        context=ctx,
+        fallback_html=_builtin,
+    )
 
 
 async def _pdf_designed_bill(
@@ -294,7 +300,10 @@ async def patient_card_html(
     report_service: ReportService = Depends(get_report_service),
 ):
     patient = await get_patient_service(session).get_patient(patient_id)
-    html = report_service.render_html(
+    html = await _render_fixed_report(
+        session,
+        report_service,
+        "PATIENT_CARD",
         "patient_card.html",
         await _report_context(session, build_patient_card_context(patient)),
     )
@@ -327,7 +336,10 @@ async def opd_casesheet_html(
     patient = await get_patient_service(session).get_patient(patient_id)
     doctor = await DoctorService(session).get_doctor(doctor_id)
     target_date = case_date or date.today()
-    html = report_service.render_html(
+    html = await _render_fixed_report(
+        session,
+        report_service,
+        "OPD_CASESHEET",
         "opd_casesheet.html",
         await _report_context(
             session,
@@ -662,7 +674,10 @@ async def pathology_report_html(
         order = await PathologyOrderService(session).get_order_by_bill(bill_id)
     except HTTPException:
         order = None
-    html = report_service.render_html(
+    html = await _render_fixed_report(
+        session,
+        report_service,
+        "PATHOLOGY_REPORT",
         "pathology_report.html",
         await _report_context(
             session,
@@ -685,7 +700,10 @@ async def pathology_report_html_by_no(
         order = await PathologyOrderService(session).get_order_by_bill(bill.id)
     except HTTPException:
         order = None
-    html = report_service.render_html(
+    html = await _render_fixed_report(
+        session,
+        report_service,
+        "PATHOLOGY_REPORT",
         "pathology_report.html",
         await _report_context(
             session,
@@ -835,7 +853,10 @@ async def form_3c_report_html(
         from_date=from_date,
         to_date=to_date,
     )
-    html = report_service.render_html(
+    html = await _render_fixed_report(
+        session,
+        report_service,
+        "FORM_3C_REPORT",
         "form_3c_report.html",
         await _report_context(session, build_form_3c_report_context(report)),
     )
@@ -870,7 +891,10 @@ async def cancellation_bill_report_html(
         to_date=to_date,
         bill_type=bill_type,
     )
-    html = report_service.render_html(
+    html = await _render_fixed_report(
+        session,
+        report_service,
+        "CANCELLATION_BILL_REPORT",
         "cancellation_bill_report.html",
         await _report_context(session, build_cancellation_bill_report_context(report)),
     )
@@ -905,7 +929,10 @@ async def modification_bill_report_html(
         to_date=to_date,
         bill_type=bill_type,
     )
-    html = report_service.render_html(
+    html = await _render_fixed_report(
+        session,
+        report_service,
+        "MODIFICATION_BILL_REPORT",
         "modification_bill_report.html",
         await _report_context(session, build_modification_bill_report_context(report)),
     )
@@ -925,7 +952,10 @@ async def short_bill_report_html(
         from_date=from_date,
         to_date=to_date,
     )
-    html = report_service.render_html(
+    html = await _render_fixed_report(
+        session,
+        report_service,
+        "SHORT_BILL_REPORT",
         "short_bill_report.html",
         await _report_context(session, build_short_bill_report_context(report)),
     )
@@ -962,7 +992,10 @@ async def single_service_opd_report_html(
         from_date=from_date,
         to_date=to_date,
     )
-    html = report_service.render_html(
+    html = await _render_fixed_report(
+        session,
+        report_service,
+        "SINGLE_SERVICE_OPD_REPORT",
         "short_bill_report.html",
         await _report_context(session, build_single_service_opd_report_context(report)),
     )
@@ -1038,6 +1071,7 @@ async def user_cash_transaction_report_html(
         "user_cash_transaction_report.html",
         await _report_context(session, build_user_cash_transaction_report_context(report)),
     )
+    html = await _stamp_template_page_size(session, "USER_CASH_REPORT", html)
     return _html_response(html)
 
 
@@ -1145,7 +1179,10 @@ async def doctor_collection_report_html(
         payment_modes=payment_modes or None,
         report_type=report_type,
     )
-    html = report_service.render_html(
+    html = await _render_fixed_report(
+        session,
+        report_service,
+        "DOCTOR_COLLECTION",
         "doctor_collection_report.html",
         await _report_context(session, build_doctor_collection_report_context(report)),
     )
@@ -1233,7 +1270,10 @@ async def pathology_collection_report_html(
         referral_names=referral_names or None,
         report_type=report_type,
     )
-    html = report_service.render_html(
+    html = await _render_fixed_report(
+        session,
+        report_service,
+        "PATHOLOGY_DOCTOR_COLLECTION",
         "pathology_collection_report.html",
         await _report_context(session, build_pathology_collection_report_context(report)),
     )

@@ -22,6 +22,8 @@ from modules.hospital.hms.api.v1.endpoints import (
     ipd_discharge_summaries,
     lab_tests,
     legacy_migrate,
+    mdb_migrate,
+    previous_migrate,
     letter_templates,
     menus,
     notifications,
@@ -38,7 +40,7 @@ from modules.hospital.hms.api.v1.endpoints import (
     procedure_types,
     reports,
     roles,
-    service_categories,
+    service_groups,
     service_sub_categories,
     short_bills,
     single_service_opd,
@@ -101,7 +103,7 @@ hospital_api.include_router(
     billing_structure.router, prefix="/billing-structure", tags=["hospital-billing-structure"]
 )
 hospital_api.include_router(
-    service_categories.router, prefix="/service-categories", tags=["hospital-service-categories"]
+    service_groups.router, prefix="/service-groups", tags=["hospital-service-groups"]
 )
 hospital_api.include_router(
     billing_packages.router, prefix="/billing-packages", tags=["hospital-billing-packages"]
@@ -143,4 +145,10 @@ hospital_api.include_router(admin.router, prefix="/admin", tags=["hospital-admin
 hospital_api.include_router(backup.router, prefix="/backup", tags=["hospital-backup"])
 hospital_api.include_router(
     legacy_migrate.router, prefix="/admin", tags=["hospital-admin", "legacy-migrate"]
+)
+hospital_api.include_router(
+    previous_migrate.router, prefix="/admin", tags=["hospital-admin", "previous-migrate"]
+)
+hospital_api.include_router(
+    mdb_migrate.router, prefix="/admin", tags=["hospital-admin", "mdb-migrate"]
 )

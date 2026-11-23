@@ -391,7 +391,7 @@ export function HospitalProfilePage() {
           <div className="hms-box hms-box-danger">
             <div className="hms-box-title">Database Maintenance</div>
             <div className="hint" style={{ marginTop: 4 }}>
-              Reset transactional data, or import from the old MySQL hospital software. Hospital
+              Reset transactional data, or copy an old database into this version. Hospital
               information, users and menus are always kept on reset. Both tools require the
               maintenance password.
             </div>

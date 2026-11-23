@@ -16,7 +16,7 @@ class PatientServiceMasterBase(BaseModel):
     discount_apply: bool = False
     is_renewal: bool = False
     renewal_days: int | None = Field(None, ge=0, le=9999)
-    category_id: str | None = None
+    group_id: str | None = None
     sub_category_id: str | None = None
     is_service_active: bool = True
     close_date: date | None = None
@@ -63,10 +63,17 @@ class PatientServiceMasterUpdate(BaseModel):
     discount_apply: bool | None = None
     is_renewal: bool | None = None
     renewal_days: int | None = Field(None, ge=0, le=9999)
-    category_id: str | None = None
+    group_id: str | None = None
     sub_category_id: str | None = None
     is_service_active: bool | None = None
     close_date: date | None = None
+
+
+class PatientServiceImportResult(BaseModel):
+    created: int = 0
+    skipped: int = 0
+    errors: list[str] = Field(default_factory=list)
+    message: str = ""
 
 
 class PatientServiceMasterRead(ORMModel):
@@ -79,8 +86,8 @@ class PatientServiceMasterRead(ORMModel):
     doctor_id: str | None
     doctor_name: str | None = None
     show_in_doctor_collection: bool = False
-    category_id: str | None = None
-    category_name: str | None = None
+    group_id: str | None = None
+    group_name: str | None = None
     sub_category_id: str | None = None
     sub_category_name: str | None = None
     discount_apply: bool

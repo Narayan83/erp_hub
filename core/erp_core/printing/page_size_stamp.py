@@ -7,11 +7,48 @@ from typing import Any
 
 
 def _template_orientation(layout: dict[str, Any] | None, fmt: str, fallback: str) -> str:
+    """Use the orientation shown in Print Master. That is what the designer saves."""
+    saved = str(fallback or "").lower()
+    if saved in {"portrait", "landscape"}:
+        return saved
     page_meta = ((layout or {}).get("page") or {}).get(fmt) or {}
-    meta_orientation = str(page_meta.get("orientation") or fallback).lower()
+    meta_orientation = str(page_meta.get("orientation") or "").lower()
     if meta_orientation in {"portrait", "landscape"}:
         return meta_orientation
-    return fallback
+    return "portrait"
+
+
+def orient_page_mm(
+    width: float, height: float, orientation: str, fmt: str = ""
+) -> tuple[float, float, str]:
+    """Match the designer sheet.
+
+    A stock size such as A4 is stored tall. Landscape on that stock size is the
+    wide sheet (297 × 210). A custom page already has the millimetres you typed,
+    so those are not swapped again.
+    """
+    orientation = orientation if orientation in {"portrait", "landscape"} else "portrait"
+    code = str(fmt or "").upper()
+    if orientation == "landscape" and not code.startswith("CUSTOM"):
+        return float(height), float(width), orientation
+    return float(width), float(height), orientation
+
+
+def lock_designer_orientation(layout: dict[str, Any] | None, fmt: str, saved: str | None) -> dict[str, Any] | None:
+    """Write the designer's orientation onto the page that will be printed."""
+    if not isinstance(layout, dict):
+        return layout
+    code = str(fmt or "").strip().upper()
+    if not code or code == "CUSTOM":
+        return layout
+    orientation = _template_orientation(layout, code, str(saved or ""))
+    updated = dict(layout)
+    page = dict(updated.get("page") or {})
+    meta = dict(page.get(code) or {})
+    meta["orientation"] = orientation
+    page[code] = meta
+    updated["page"] = page
+    return updated
 
 
 def resolve_print_format(cfg: Any, layout: dict[str, Any] | None = None) -> str:
@@ -66,9 +103,7 @@ def resolve_print_page_mm(cfg: Any, layout: dict[str, Any] | None = None) -> tup
     else:
         width, height = paper_mm(layout, fmt)
     orientation = _template_orientation(layout, fmt, orientation)
-    if orientation == "landscape":
-        width, height = height, width
-    return float(width), float(height), orientation
+    return orient_page_mm(width, height, orientation, fmt)
 
 
 def _page_margin_css(html: str) -> str:
@@ -88,11 +123,15 @@ def stamp_page_size_attrs(
     width_mm: float,
     height_mm: float,
     orientation: str = "portrait",
+    paper: str | None = None,
+    code: str | None = None,
 ) -> str:
     """Ensure body data-page-* and @page size exist so desktop preview uses exact mm."""
     if not html or width_mm < 40 or height_mm < 40:
         return html
     orientation = orientation if orientation in {"portrait", "landscape"} else "portrait"
+    paper_code = re.sub(r"[^A-Za-z0-9_]", "", (paper or "").strip().upper())[:32]
+    report_code = re.sub(r"[^A-Za-z0-9_]", "", (code or "").strip().upper())[:40]
     w = f"{width_mm:g}"
     h = f"{height_mm:g}"
 
@@ -126,6 +165,42 @@ def stamp_page_size_attrs(
             count=1,
             flags=re.IGNORECASE,
         )
+
+    if report_code:
+        if re.search(r"data-report-code=", html, re.IGNORECASE):
+            html = re.sub(
+                r"data-report-code=['\"][^'\"]*['\"]",
+                f"data-report-code='{report_code}'",
+                html,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        else:
+            html = re.sub(
+                r"<body\b",
+                f"<body data-report-code='{report_code}'",
+                html,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+
+    if paper_code:
+        if re.search(r"data-page-size=", html, re.IGNORECASE):
+            html = re.sub(
+                r"data-page-size=['\"][^'\"]*['\"]",
+                f"data-page-size='{paper_code}'",
+                html,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        else:
+            html = re.sub(
+                r"<body\b",
+                f"<body data-page-size='{paper_code}'",
+                html,
+                count=1,
+                flags=re.IGNORECASE,
+            )
 
     page_rule = f"@page{{size:{w}mm {h}mm;margin:{_page_margin_css(html)};}}"
     if re.search(r"@page\s*\{[^}]*size\s*:", html, re.IGNORECASE):

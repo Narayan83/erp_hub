@@ -25,6 +25,8 @@ class SingleServiceOpdOption(Base, TimestampMixin):
     )
     service_name: Mapped[str] = mapped_column(String(200), nullable=False)
     use_patient_id: Mapped[bool] = mapped_column(Boolean, default=False)
+    # When true, a new bill opens with every service unchecked.
+    services_start_unselected: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     default_rate: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     doctor_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False), ForeignKey("doctors.id"), nullable=True, index=True

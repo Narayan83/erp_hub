@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
+import { DateField } from '../components/DateField'
 import { LedgerTable } from '../components/LedgerTable'
 import { MemberSnapshot } from '../components/MemberSnapshot'
 import type { Ledger, Member, MemberList, ShareType } from '../types'
@@ -158,7 +159,7 @@ export function TransactionsPage() {
             ))}
           </div>
         )}
-        {ledger && <MemberSnapshot member={ledger.member} />}
+        {ledger && <MemberSnapshot member={ledger.member} allowPhotoUpload />}
         <div className="row">
           <label className="short">
             Type
@@ -179,7 +180,7 @@ export function TransactionsPage() {
           </label>
           <label>
             Date
-            <input className="input" type="date" value={txnDate} onChange={(e) => setTxnDate(e.target.value)} />
+            <DateField value={txnDate} onChange={setTxnDate} />
           </label>
           <label>
             Share number (RNO)

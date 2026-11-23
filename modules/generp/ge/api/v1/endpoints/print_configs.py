@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from erp_core.product_config import get_product_name
 from modules.generp.ge.api.deps import get_current_user, require_print_layout_editor, get_session, user_is_super_admin
 from modules.generp.ge.models.auth import User
 from modules.generp.ge.models.masters import CompanyProfile, PrintConfig
@@ -133,7 +134,12 @@ async def list_bill_formats(
     code_u = (code or "").strip().upper()
     if code_u in DOCUMENT_KINDS:
         obj = (
-            await session.execute(select(PrintConfig).where(PrintConfig.code == code_u))
+            await session.execute(
+                select(PrintConfig).where(
+                    PrintConfig.product == get_product_name(),
+                    PrintConfig.code == code_u,
+                )
+            )
         ).scalar_one_or_none()
         layout = normalize_layout(code_u, obj.layout_options if obj else None)
         for fmt_code, page in custom_pages_of(layout).items():
@@ -165,7 +171,12 @@ async def get_print_layout(
     if code_u not in DOCUMENT_KINDS:
         raise HTTPException(status_code=404, detail="No template for this document")
     obj = (
-        await session.execute(select(PrintConfig).where(PrintConfig.code == code_u))
+        await session.execute(
+            select(PrintConfig).where(
+                PrintConfig.product == get_product_name(),
+                PrintConfig.code == code_u,
+            )
+        )
     ).scalar_one_or_none()
     layout = normalize_layout(code_u, obj.layout_options if obj else None)
     return {
@@ -188,7 +199,12 @@ async def save_print_layout(
     if code_u not in DOCUMENT_KINDS:
         raise HTTPException(status_code=404, detail="No template for this document")
     obj = (
-        await session.execute(select(PrintConfig).where(PrintConfig.code == code_u))
+        await session.execute(
+            select(PrintConfig).where(
+                PrintConfig.product == get_product_name(),
+                PrintConfig.code == code_u,
+            )
+        )
     ).scalar_one_or_none()
     if not obj:
         raise HTTPException(status_code=404, detail="Print config not found")
@@ -210,7 +226,12 @@ async def save_print_layout_page(
     if code_u not in DOCUMENT_KINDS:
         raise HTTPException(status_code=404, detail="No template for this document")
     obj = (
-        await session.execute(select(PrintConfig).where(PrintConfig.code == code_u))
+        await session.execute(
+            select(PrintConfig).where(
+                PrintConfig.product == get_product_name(),
+                PrintConfig.code == code_u,
+            )
+        )
     ).scalar_one_or_none()
     if not obj:
         raise HTTPException(status_code=404, detail="Print config not found")
@@ -235,7 +256,12 @@ async def reset_print_layout(
     if code_u not in DOCUMENT_KINDS:
         raise HTTPException(status_code=404, detail="No template for this document")
     obj = (
-        await session.execute(select(PrintConfig).where(PrintConfig.code == code_u))
+        await session.execute(
+            select(PrintConfig).where(
+                PrintConfig.product == get_product_name(),
+                PrintConfig.code == code_u,
+            )
+        )
     ).scalar_one_or_none()
     if not obj:
         raise HTTPException(status_code=404, detail="Print config not found")
@@ -271,19 +297,35 @@ async def preview_print_layout(
     ).scalar_one_or_none()
     if profile is not None:
         context.update(company_header_context(profile))
-    html = render_document_html(
-        code=code_u,
-        context=context,
-        layout_raw=layout,
-        bill_format=bill_format,
-    )
+    # Platform designed sheets (Bill Template Designer) use core renderer.
+    if isinstance(data.layout, dict) and data.layout.get("designed"):
+        from erp_core.printing.renderer import render_document_html as render_designed_html
+
+        html = render_designed_html(
+            code=code_u,
+            context=context,
+            layout_raw=data.layout,
+            bill_format=bill_format,
+        )
+    else:
+        html = render_document_html(
+            code=code_u,
+            context=context,
+            layout_raw=layout,
+            bill_format=bill_format,
+        )
     return HTMLResponse(content=html)
 
 
 @router.get("", response_model=list[PrintConfigOut])
 async def list_configs(_u=Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     result = await session.execute(
-        select(PrintConfig).where(PrintConfig.is_active.is_(True)).order_by(PrintConfig.sort_order)
+        select(PrintConfig)
+        .where(
+            PrintConfig.product == get_product_name(),
+            PrintConfig.is_active.is_(True),
+        )
+        .order_by(PrintConfig.sort_order)
     )
     rows = list(result.scalars().all())
     sync_print_ini_codes([r.code for r in rows])
@@ -293,7 +335,12 @@ async def list_configs(_u=Depends(get_current_user), session: AsyncSession = Dep
 @router.get("/by-code/{code}", response_model=PrintConfigOut)
 async def get_by_code(code: str, _u=Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     obj = (
-        await session.execute(select(PrintConfig).where(PrintConfig.code == code.upper()))
+        await session.execute(
+            select(PrintConfig).where(
+                PrintConfig.product == get_product_name(),
+                PrintConfig.code == code.upper(),
+            )
+        )
     ).scalar_one_or_none()
     if not obj:
         raise HTTPException(status_code=404, detail="Not found")
@@ -308,7 +355,12 @@ async def update_config(
     session: AsyncSession = Depends(get_session),
 ):
     obj = (
-        await session.execute(select(PrintConfig).where(PrintConfig.id == config_id))
+        await session.execute(
+            select(PrintConfig).where(
+                PrintConfig.product == get_product_name(),
+                PrintConfig.id == config_id,
+            )
+        )
     ).scalar_one_or_none()
     if not obj:
         raise HTTPException(status_code=404, detail="Not found")

@@ -33,9 +33,9 @@ class PatientServiceMaster(Base, TimestampMixin):
     renewal_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_service_active: Mapped[bool] = mapped_column(Boolean, default=True)
     close_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    category_id: Mapped[str | None] = mapped_column(
+    group_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
-        ForeignKey("service_categories.id"),
+        ForeignKey("service_groups.id"),
         nullable=True,
     )
     sub_category_id: Mapped[str | None] = mapped_column(
@@ -46,5 +46,5 @@ class PatientServiceMaster(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     doctor: Mapped["Doctor | None"] = relationship("Doctor")
-    category: Mapped["ServiceCategory | None"] = relationship("ServiceCategory")
+    group: Mapped["ServiceGroup | None"] = relationship("ServiceGroup")
     sub_category: Mapped["ServiceSubCategory | None"] = relationship("ServiceSubCategory")

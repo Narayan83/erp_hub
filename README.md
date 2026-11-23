@@ -1,24 +1,28 @@
+.\run.ps1 -Product hospital -Web
+.\run.ps1 -Product generp -Web
+.\run.ps1 -Product lodge -Web
+.\run.ps1 -Product kramcop -Web
+.\run.ps1 -Product contract_farming -Web
+
+
+.\scripts\build_hospital_web_exe.ps1
+.\scripts\build_generp_web_exe.ps1
+.\scripts\build_lodge_web_exe.ps1
+.\scripts\build_kramcop_web_exe.ps1
+.\scripts\build_contract_farming_web_exe.ps1
+
+
+
+
 # ERP Platform
 
 From the repo root (`erp_hub`). Password for every product is `admin123`.
 
 ## Build EXE (client)
 
-```powershell
-.\scripts\build_hospital_web_exe.ps1
-.\scripts\build_generp_web_exe.ps1
-.\scripts\build_lodge_web_exe.ps1
-.\scripts\build_kramcop_web_exe.ps1
-.\scripts\build_contract_farming_web_exe.ps1
-```
 
-| Product | Command | Output |
-|---------|---------|--------|
-| hospital | `.\scripts\build_hospital_web_exe.ps1` | `installer\release\Hospital.exe` |
-| generp | `.\scripts\build_generp_web_exe.ps1` | `installer\release\Generp.exe` |
-| lodge | `.\scripts\build_lodge_web_exe.ps1` | `installer\release\Lodge.exe` |
-| kramcop | `.\scripts\build_kramcop_web_exe.ps1` | `installer\release\Kramcop.exe` |
-| contract_farming | `.\scripts\build_contract_farming_web_exe.ps1` | `installer\release\ContractFarming.exe` |
+
+
 
 Skip web rebuild when `apps\web\dist` is already built (any product):
 
@@ -154,6 +158,10 @@ erp_hub/
     build_kramcop_web_exe.ps1
     build_contract_farming_web_exe.ps1
 ```
+
+## Printing (all products)
+
+Print Master, Bill Template Designer, per-PC printers (`config/print.ini`), and designed layouts live in **core**. Every product — including a new `config/products/*.json` with `menu_mode=extend` — gets Print Master menus, `/print-configs`, and the shared print preview. Report HTML should call `erp_core.services.designed_print.render_designed_or_fallback` so a saved design is used when present.
 
 ## Prerequisites
 

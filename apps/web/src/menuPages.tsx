@@ -25,6 +25,7 @@ import { PathologyBillPage } from './pages/hospital/PathologyBillPage'
 import { PharmacyItemPage } from './pages/hospital/PharmacyItemPage'
 import { PatientServiceMasterPage } from './pages/hospital/PatientServiceMasterPage'
 import { HospitalProfilePage } from './pages/hospital/HospitalProfilePage'
+import { DatabaseMigrationPage } from './pages/hospital/DatabaseMigrationPage'
 import { MenuCreationPage } from './pages/hospital/MenuCreationPage'
 import { PaymentModeMasterPage } from './pages/hospital/masters/PaymentModeMasterPage'
 import { PatientIdFormatPage } from './pages/hospital/masters/PatientIdFormatPage'
@@ -34,7 +35,7 @@ import { PathologyCollectionReportPage } from './pages/hospital/reports/Patholog
 import { UserCashTransactionReportPage } from './pages/hospital/reports/UserCashTransactionReportPage'
 import { CancellationBillReportPage } from './pages/hospital/reports/CancellationBillReportPage'
 import { ModificationBillReportPage } from './pages/hospital/reports/ModificationBillReportPage'
-import { UserMasterPage } from './pages/hospital/users/UserMasterPage'
+import { UserManagementPage } from './pages/core/UserManagementPage'
 import { UserTypePage } from './pages/hospital/users/UserTypePage'
 import { RoleManagementPage } from './pages/hospital/users/RoleManagementPage'
 import { RoleMenuPermissionsPage } from './pages/hospital/users/RoleMenuPermissionsPage'
@@ -124,9 +125,6 @@ const PAGES: Record<string, () => ReactNode> = {
     <CodeNameMasterPage title="Authority Master" listPath="/hospital/authorities" />
   ),
   scheme_master: () => <SchemeMasterPage />,
-  service_category_master: () => (
-    <CodeNameMasterPage title="Service Categories" listPath="/hospital/service-categories" />
-  ),
   service_sub_category_master: () => (
     <CodeNameMasterPage title="Service Sub Categories" listPath="/hospital/service-sub-categories" />
   ),
@@ -225,15 +223,13 @@ const PAGES: Record<string, () => ReactNode> = {
   user_wise_report: () => <UserCashTransactionReportPage />,
 
   // Users
-  user_addition_modification: () => <UserMasterPage />,
+  user_addition_modification: () => <UserManagementPage />,
   user_type_creation: () => <UserTypePage />,
   role_management: () => <RoleManagementPage />,
   role_menu_permissions: () => <RoleMenuPermissionsPage />,
   user_role_mapping: () => <UserRoleMappingPage />,
   notification_setup: () => <NotificationSetupPage />,
-  database_migration: () => (
-    <PlaceholderPage title="Database Migration" note="Admin tool — use API /hospital/admin endpoints." />
-  ),
+  database_migration: () => <DatabaseMigrationPage />,
   print_template_designer: () => <BillTemplateDesignerPage />,
 
   // Shortcuts / assignments

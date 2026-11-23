@@ -64,6 +64,7 @@ _BILL_CODES = {
     "ADVANCE_RECEIPT",
     "SINGLE_SERVICE_OPD",
     "SHORT_BILL",
+    "GENERIC_DOCUMENT",
 }
 
 _LANDSCAPE_CODES = {
@@ -194,6 +195,13 @@ _TEXT_DEFAULTS = {
 
 # Visible field ids per document. Anything else stays in the catalog but hidden.
 _VISIBLE: dict[str, dict[str, list[str]]] = {
+    "GENERIC_DOCUMENT": {
+        "header": ["hospital_name", "hospital_address", "hospital_phone", "bill_title"],
+        "meta": ["patient_no", "patient_name", "bill_no", "bill_date"],
+        "columns": ["sr", "name", "rate", "qty", "amount"],
+        "totals": ["gross_amount", "scheme_discount", "net_amount"],
+        "footer": ["payment_mode", "remarks", "computer_note", "signature"],
+    },
     "OPD_BILL": {
         "header": ["hospital_name", "hospital_address", "hospital_phone", "bill_title"],
         "meta": ["patient_no", "department_name", "bill_date", "patient_name", "doctor_name", "bill_no"],
@@ -413,7 +421,7 @@ def layout_family(code: str) -> str:
         return "SINGLE_SERVICE_OPD"
     if code_u in DOCUMENT_NAMES:
         return code_u
-    return "OPD_BILL"
+    return "GENERIC_DOCUMENT"
 
 
 def catalog_with_single_service_options(options: list[tuple[str, str]]) -> dict[str, Any]:
@@ -438,22 +446,63 @@ def catalog_with_single_service_options(options: list[tuple[str, str]]) -> dict[
     return payload
 
 
-def catalog_payload() -> dict[str, Any]:
-    payload = {
-        "version": LAYOUT_VERSION,
-        "documents": [
+def _field_label_for_active_product(fid: str, default_label: str) -> str:
+    from erp_core.product_config import get_product_name, label
+
+    if get_product_name() == "hospital":
+        return default_label
+    party = label("party", "Party")
+    company = label("company", "Company")
+    rename = {
+        "hospital_name": f"{company} name",
+        "hospital_address": "Address",
+        "hospital_phone": "Phone",
+        "hospital_mobile": "Mobile",
+        "hospital_email": "Email",
+        "hospital_gstin": "GSTIN",
+        "hospital_registration_number": "Registration no",
+        "hospital_website": "Website",
+        "hospital_software_id": "Software ID",
+        "hospital_amount": company,
+        "patient_no": f"{party} no",
+        "patient_name": f"{party} name",
+        "patient_age": "Age",
+        "patient_gender": "Sex",
+    }
+    if fid in rename:
+        return rename[fid]
+    return str(default_label or "").replace("Hospital", company).replace("Patient", party)
+
+
+def catalog_payload(documents: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    from erp_core.product_config import get_product_name, label
+
+    product = get_product_name()
+    meta_label = "Patient details" if product == "hospital" else f"{label('party', 'Party')} details"
+    doc_rows = (
+        deepcopy(documents)
+        if documents is not None
+        else [
             {
                 "code": code,
                 "name": name,
                 "kind": KIND_BILL if code in _BILL_CODES else "report",
             }
             for code, name in DOCUMENT_NAMES.items()
+        ]
+    )
+    payload = {
+        "version": LAYOUT_VERSION,
+        "product": product,
+        "documents": doc_rows,
+        "formats": [{"code": code, "name": label_text} for code, (label_text, _w, _h) in STANDARD_PAGES.items()],
+        "bands": [
+            {"id": band, "label": meta_label if band == "meta" else band.title()}
+            for band in BANDS
         ],
-        "formats": [{"code": code, "name": label} for code, (label, _w, _h) in STANDARD_PAGES.items()],
-        "bands": [{"id": band, "label": band.title()} for band in BANDS],
         "fields": deepcopy(FIELD_CATALOG),
     }
-    return _labels_for_active_product(payload)
+    return _labels_for_active_product(payload, filter_documents=(documents is None))
 
 
 _CLINICAL_WORDS = (
@@ -476,49 +525,33 @@ _CLINICAL_WORDS = (
 )
 
 
-def _labels_for_active_product(payload: dict[str, Any]) -> dict[str, Any]:
+def _labels_for_active_product(
+    payload: dict[str, Any], *, filter_documents: bool = True
+) -> dict[str, Any]:
     """Hospital wording stays on the hospital product only."""
-    from erp_core.product_config import get_product_name, label
+    from erp_core.product_config import get_product_name
 
     if get_product_name() == "hospital":
         return payload
-    party = label("party", "Party")
-    company = label("company", "Company")
-    rename = {
-        "hospital_name": f"{company} name",
-        "hospital_address": "Address",
-        "hospital_phone": "Phone",
-        "hospital_mobile": "Mobile",
-        "hospital_email": "Email",
-        "hospital_gstin": "GSTIN",
-        "hospital_registration_number": "Registration no",
-        "hospital_website": "Website",
-        "hospital_software_id": "Software ID",
-        "hospital_amount": company,
-        "patient_no": f"{party} no",
-        "patient_name": f"{party} name",
-        "patient_age": "Age",
-        "patient_gender": "Sex",
-    }
     fields = []
     for row in payload.get("fields") or []:
         item = dict(row)
-        if item.get("id") in rename:
-            item["label"] = rename[item["id"]]
-        else:
-            text = str(item.get("label") or "")
-            item["label"] = text.replace("Hospital", company).replace("Patient", party)
+        item["label"] = _field_label_for_active_product(
+            str(item.get("id") or ""),
+            str(item.get("label") or ""),
+        )
         fields.append(item)
     payload["fields"] = fields
-    kept = []
-    for doc in payload.get("documents") or []:
-        blob = f"{doc.get('code', '')} {doc.get('name', '')}".lower()
-        if any(word in blob for word in _CLINICAL_WORDS):
-            continue
-        kept.append(doc)
-    payload["documents"] = kept or [
-        {"code": "ADVANCE_RECEIPT", "name": "Receipt", "kind": KIND_BILL}
-    ]
+    if filter_documents:
+        kept = []
+        for doc in payload.get("documents") or []:
+            blob = f"{doc.get('code', '')} {doc.get('name', '')}".lower()
+            if any(word in blob for word in _CLINICAL_WORDS):
+                continue
+            kept.append(doc)
+        payload["documents"] = kept or [
+            {"code": "ADVANCE_RECEIPT", "name": "Receipt", "kind": KIND_BILL}
+        ]
     return payload
 
 
@@ -633,7 +666,7 @@ def _default_band(code: str, band: str) -> list[dict[str, Any]]:
                     "id": fid,
                     "band": band,
                     "visible": True,
-                    "label": row["label"],
+                    "label": _field_label_for_active_product(fid, row["label"]),
                     "align": row.get("align") or ("center" if band == "header" else "left"),
                     "width": row.get("width"),
                     "text": _TEXT_DEFAULTS.get(fid),
@@ -654,7 +687,7 @@ def _default_band(code: str, band: str) -> list[dict[str, Any]]:
                     "id": row["id"],
                     "band": band,
                     "visible": False,
-                    "label": row["label"],
+                    "label": _field_label_for_active_product(row["id"], row["label"]),
                     "align": row.get("align") or "left",
                     "width": row.get("width"),
                     "text": _TEXT_DEFAULTS.get(row["id"]),
@@ -1009,7 +1042,8 @@ def layout_for_format(layout: dict[str, Any], bill_format: str | None) -> dict[s
     return {name: list(band.get(name) or []) for name in BANDS}
 
 
-def sample_context(code: str) -> dict[str, Any]:
+def sample_context(code: str, *, title: str | None = None) -> dict[str, Any]:
+    raw_code = (code or "").strip().upper()
     code = layout_family(code)
     lines = [
         {"sr": 1, "code": "CON", "name": "Consultation", "category": "OPD", "rate": "500.00", "qty": 1, "amount": "500.00"},
@@ -1031,7 +1065,7 @@ def sample_context(code: str) -> dict[str, Any]:
         "hospital_registration_number": "REG-KA-12345",
         "hospital_website": "www.hospital.example",
         "hospital_software_id": "HMS-001",
-        "bill_title": DOCUMENT_NAMES.get(code, "Bill"),
+        "bill_title": (title or "").strip() or DOCUMENT_NAMES.get(raw_code, "Document"),
         "patient_no": "P00021",
         "patient_name": "Anita Rao",
         "patient_age": "34",
@@ -1081,10 +1115,10 @@ def sample_context(code: str) -> dict[str, Any]:
         ctx["referring_doctor"] = ""
         ctx["department_name"] = ""
         ctx["visit_category"] = ""
-        for line in ctx["lines"]:
-            if str(line.get("category") or "").upper() == "OPD":
+        for idx, line in enumerate(ctx["lines"], start=1):
+            if str(line.get("category") or "").upper() in {"OPD", "LAB"}:
                 line["category"] = "General"
-            if "blood" in str(line.get("name") or "").lower():
-                line["name"] = "Sample item"
-                line["code"] = "ITEM"
+            if str(line.get("name") or "").lower() in {"consultation", "complete blood count"}:
+                line["name"] = f"Sample Item {idx}"
+                line["code"] = f"ITM{idx}"
     return ctx

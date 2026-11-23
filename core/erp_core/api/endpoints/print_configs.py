@@ -9,6 +9,8 @@ from __future__ import annotations
 from copy import deepcopy
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -16,10 +18,9 @@ from erp_core.api.deps import get_current_user, get_session
 from erp_core.models.auth import User
 from erp_core.models.masters import PrintConfig
 from erp_core.printing.layouts import (
-    DOCUMENT_NAMES,
     STANDARD_PAGES,
     apply_shared_pages,
-    catalog_with_single_service_options,
+    catalog_payload,
     collect_shared_pages,
     custom_pages_of,
     default_document_layout,
@@ -44,15 +45,10 @@ router = APIRouter()
 
 
 async def _resolve_document(session: AsyncSession, code: str) -> tuple[str, str]:
-    """Return the print-config code and the name shown in the designer."""
-    code_u = (code or "").strip().upper()
-    if code_u in DOCUMENT_NAMES:
-        return code_u, DOCUMENT_NAMES[code_u]
-    option_id = single_service_option_id_from_layout_code(code_u)
-    if option_id:
-        option_name = await PrintConfigService(session).single_service_option_name(option_id)
-        if option_name is not None:
-            return code_u, option_name
+    """Return the print-config code and the name shown in the designer for this product."""
+    resolved = await PrintConfigService(session).resolve_document(code)
+    if resolved is not None:
+        return resolved
     raise HTTPException(status_code=404, detail="No template for this document")
 
 
@@ -66,6 +62,8 @@ async def _config_for_document(
     repo = PrintConfigRepository(session)
     obj = await repo.get_by_code(code)
     if obj or not create:
+        if obj is not None and create and not obj.is_active:
+            obj.is_active = True
         # Keep Print Master names for fixed documents. Option templates follow the option name.
         if (
             obj is not None
@@ -78,6 +76,7 @@ async def _config_for_document(
         return obj
     width, height = paper_mm(None, "A4")
     obj = PrintConfig(
+        product=repo.product,
         code=code,
         name=name,
         paper_size="A4",
@@ -102,10 +101,9 @@ async def print_layout_catalog(
     session: AsyncSession = Depends(get_session),
 ):
     service = PrintConfigService(session)
-    # Hospital-only enrichment; empty list for other products / when module is disabled.
-    options = await service.single_service_options()
+    documents = await service.product_documents()
     saved = await service.designed_layout_entries()
-    payload = catalog_with_single_service_options(options)
+    payload = catalog_payload(documents=documents)
     payload["shared_pages"] = collect_shared_pages(saved)
     return payload
 
@@ -233,9 +231,7 @@ async def preview_print_layout(
 ):
     code_u, name = await _resolve_document(session, data.code)
     layout = normalize_layout(code_u, data.layout)
-    context = sample_context(code_u)
-    if single_service_option_id_from_layout_code(code_u):
-        context["bill_title"] = name
+    context = sample_context(code_u, title=name)
     html = render_document_html(
         code=code_u,
         context=context,
@@ -254,6 +250,68 @@ async def list_print_configs(
     session: AsyncSession = Depends(get_session),
 ):
     return await PrintConfigService(session).list_configs()
+
+
+class _PdfJobIn(BaseModel):
+    html: str
+    title: str = "Document"
+
+
+@router.post("/pdf")
+async def download_pdf(data: _PdfJobIn, _u: User = Depends(get_current_user)):
+    """PDF of the exact HTML shown in the print preview, for every product."""
+    from io import BytesIO
+
+    html = (data.html or "").strip()
+    if not html:
+        raise HTTPException(status_code=400, detail="HTML content required")
+    try:
+        from xhtml2pdf import pisa
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="PDF generation is unavailable") from exc
+    buffer = BytesIO()
+    result = pisa.CreatePDF(html, dest=buffer, encoding="utf-8")
+    if result.err:
+        raise HTTPException(status_code=400, detail="PDF generation failed")
+    safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in (data.title or "Document"))[:60] or "Document"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe}.pdf"'},
+    )
+
+
+class _PrintJobIn(BaseModel):
+    html: str
+    printer_name: str | None = None
+    copies: int = Field(default=1, ge=1, le=10)
+    bill_format: str | None = None
+    orientation: str | None = None
+
+
+@router.get("/printers")
+async def list_printers(_u: User = Depends(get_current_user)):
+    """Printers installed on THIS computer (the machine running the backend)."""
+    from erp_core.printing.local import list_installed_printers
+
+    return list_installed_printers()
+
+
+@router.post("/print")
+async def print_document(data: _PrintJobIn, _u: User = Depends(get_current_user)):
+    """Send report HTML to a selected Windows printer at the page size stamped on the HTML."""
+    from erp_core.printing.local import print_html_document
+
+    try:
+        return print_html_document(
+            data.html,
+            data.printer_name,
+            data.copies,
+            data.bill_format,
+            data.orientation,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/by-code/{code}", response_model=PrintConfigRead)

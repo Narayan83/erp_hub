@@ -195,8 +195,8 @@ class BillingServiceCatalogItem(BaseModel):
     is_sharing: bool = False
     doctor_id: str | None = None
     doctor_name: str | None = None
-    category_id: str | None = None
-    category_name: str | None = None
+    group_id: str | None = None
+    group_name: str | None = None
     sub_category_id: str | None = None
     sub_category_name: str | None = None
     is_renewal: bool = False

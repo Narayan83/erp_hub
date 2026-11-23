@@ -113,8 +113,8 @@ export function PatientMasterPage() {
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [upperOpen, setUpperOpen] = useState(true)
-  const [addressOpen, setAddressOpen] = useState(true)
+  const [upperOpen, setUpperOpen] = useState(false)
+  const [otherOpen, setOtherOpen] = useState(false)
 
   async function loadList(opts?: { page?: number; search?: string }) {
     const nextPage = opts?.page ?? page
@@ -263,7 +263,7 @@ export function PatientMasterPage() {
   const locked = mode === 'Delete'
 
   return (
-    <div className="hms-page">
+    <div className="hms-page patient-master">
       <div className="hms-toolbar" style={{ justifyContent: 'space-between' }}>
         <h1 style={{ margin: 0, textDecoration: 'underline' }}>
           {mode === 'Create' ? 'New Patient Creation' : 'Patient Master'}
@@ -306,35 +306,13 @@ export function PatientMasterPage() {
         </button>
         {upperOpen && (
           <div className="hms-collapse-body">
-            <div className="hms-toolbar" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-              <div className="hms-toolbar" style={{ margin: 0 }}>
-                <label>Action</label>
-                <select className="hms-field" style={{ width: 140 }} value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-                  <option>Create</option>
-                  <option>Modify</option>
-                  <option>Delete</option>
-                </select>
-              </div>
-              <div className="hms-toolbar" style={{ margin: 0 }}>
-                <label>Select Patient</label>
-                <select
-                  className="hms-field"
-                  style={{ width: 320 }}
-                  disabled={mode === 'Create'}
-                  value={selectedId}
-                  onChange={(e) => setSelectedId(e.target.value)}
-                >
-                  <option value="">—</option>
-                  {rows.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.patient_no} — {r.full_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
             <div className="hms-toolbar" style={{ marginBottom: 0 }}>
+              <label>Action</label>
+              <select className="hms-field" style={{ width: 140 }} value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+                <option>Create</option>
+                <option>Modify</option>
+                <option>Delete</option>
+              </select>
               <input
                 className="hms-field"
                 style={{ width: 220 }}
@@ -348,6 +326,21 @@ export function PatientMasterPage() {
                   }
                 }}
               />
+              <label>Select Patient</label>
+              <select
+                className="hms-field"
+                style={{ width: 320 }}
+                disabled={mode === 'Create'}
+                value={selectedId}
+                onChange={(e) => setSelectedId(e.target.value)}
+              >
+                <option value="">—</option>
+                {rows.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.patient_no} — {r.full_name}
+                  </option>
+                ))}
+              </select>
               {listLoaded && (
                 <>
                   <button
@@ -377,162 +370,170 @@ export function PatientMasterPage() {
       </div>
 
       <form onSubmit={onSubmit}>
-        <div className="hms-toolbar" style={{ gap: 6 }}>
-          <label>Patient Id</label>
-          <input className="hms-field" style={{ width: 120 }} readOnly value={patientNo} placeholder="Auto on save" />
-          <select className="hms-field" style={{ width: 70 }} disabled={locked} value={form.title} onChange={(e) => setField('title', e.target.value)}>
-            {TITLES.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
-          <label>First Name</label>
-          <input className="hms-field" style={{ width: 160 }} required={!locked} disabled={locked} value={form.first_name} onChange={(e) => setField('first_name', e.target.value)} />
-          <label>Second Name</label>
-          <input className="hms-field" style={{ width: 140 }} disabled={locked} value={form.middle_name} onChange={(e) => setField('middle_name', e.target.value)} />
-          <label>Third Name</label>
-          <input className="hms-field" style={{ width: 140 }} disabled={locked} value={form.last_name} onChange={(e) => setField('last_name', e.target.value)} />
+        <div className="hms-identity">
+          <div className="hms-field-wrap">
+            <label>Patient Id</label>
+            <input className="hms-field" readOnly value={patientNo} placeholder="Auto on save" />
+          </div>
+          <div className="hms-field-wrap">
+            <label>First Name</label>
+            <div className="hms-identity-name">
+              <select className="hms-field" disabled={locked} value={form.title} onChange={(e) => setField('title', e.target.value)}>
+                {TITLES.map((t) => (
+                  <option key={t}>{t}</option>
+                ))}
+              </select>
+              <input className="hms-field" required={!locked} disabled={locked} value={form.first_name} onChange={(e) => setField('first_name', e.target.value)} />
+            </div>
+          </div>
+          <div className="hms-field-wrap">
+            <label>Second Name</label>
+            <input className="hms-field" disabled={locked} value={form.middle_name} onChange={(e) => setField('middle_name', e.target.value)} />
+          </div>
+          <div className="hms-field-wrap">
+            <label>Third Name</label>
+            <input className="hms-field" disabled={locked} value={form.last_name} onChange={(e) => setField('last_name', e.target.value)} />
+          </div>
+          <div className="hms-field-wrap">
+            <label>Date of Birth</label>
+            <input
+              className="hms-field"
+              type="date"
+              disabled={locked}
+              value={form.date_of_birth}
+              onChange={(e) => {
+                setField('date_of_birth', e.target.value)
+                setField('age', ageFromDob(e.target.value))
+              }}
+            />
+          </div>
+          <div className="hms-field-wrap">
+            <label>Age</label>
+            <input className="hms-field" disabled={locked} value={form.age} onChange={(e) => setField('age', e.target.value)} />
+          </div>
+          <div className="hms-field-wrap">
+            <label>Sex</label>
+            <select className="hms-field" disabled={locked} value={form.gender} onChange={(e) => setField('gender', e.target.value)}>
+              <option>M</option>
+              <option>F</option>
+              <option>O</option>
+              <option>U</option>
+            </select>
+          </div>
+          <div className="hms-field-wrap">
+            <label>Blood Grp</label>
+            <select className="hms-field" disabled={locked} value={form.blood_group} onChange={(e) => setField('blood_group', e.target.value)}>
+              <option value="">—</option>
+              {BLOOD_GROUPS.map((g) => (
+                <option key={g}>{g}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className="hms-toolbar" style={{ gap: 6 }}>
-          <label>Date of Birth</label>
-          <input
-            className="hms-field"
-            style={{ width: 140 }}
-            type="date"
-            disabled={locked}
-            value={form.date_of_birth}
-            onChange={(e) => {
-              setField('date_of_birth', e.target.value)
-              setField('age', ageFromDob(e.target.value))
-            }}
-          />
-          <label>Age</label>
-          <input className="hms-field" style={{ width: 100 }} disabled={locked} value={form.age} onChange={(e) => setField('age', e.target.value)} />
-          <label>Sex</label>
-          <select className="hms-field" style={{ width: 70 }} disabled={locked} value={form.gender} onChange={(e) => setField('gender', e.target.value)}>
-            <option>M</option>
-            <option>F</option>
-            <option>O</option>
-            <option>U</option>
-          </select>
-          <label>Blood Grp</label>
-          <select className="hms-field" style={{ width: 90 }} disabled={locked} value={form.blood_group} onChange={(e) => setField('blood_group', e.target.value)}>
-            <option value="">—</option>
-            {BLOOD_GROUPS.map((g) => (
-              <option key={g}>{g}</option>
-            ))}
-          </select>
+        <div className="hms-grid hms-grid-2 patient-master-addresses">
+          <div className="hms-box">
+            <div className="hms-box-title">Contact Address</div>
+            <div className="hms-grid hms-grid-2" style={{ marginTop: 4 }}>
+              {(
+                [
+                  ['village_code', 'Village Code'],
+                  ['contact_address1', 'Village/Address1'],
+                  ['contact_address2', 'Post/Address2'],
+                  ['contact_address3', 'Taluk/Address3'],
+                  ['contact_address4', 'District/Address4'],
+                  ['contact_address5', 'Pin Code'],
+                  ['aadhar_no', 'Aadhar No'],
+                ] as const
+              ).map(([key, label]) => (
+                <div className="hms-field-wrap" key={key}>
+                  <label>{label}</label>
+                  <input className="hms-field" disabled={locked} value={form[key]} onChange={(e) => setField(key, e.target.value)} />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="hms-box">
+            <div className="hms-box-title">Additional Address</div>
+            <div className="hms-grid hms-grid-2" style={{ marginTop: 4 }}>
+              {(
+                [
+                  ['perm_address1', 'Village/Address1'],
+                  ['perm_address2', 'Post/Address2'],
+                  ['perm_address3', 'Taluk/Address3'],
+                  ['perm_address4', 'District/Address4'],
+                  ['perm_address5', 'Pin Code'],
+                ] as const
+              ).map(([key, label]) => (
+                <div className="hms-field-wrap" key={key}>
+                  <label>{label}</label>
+                  <input className="hms-field" disabled={locked} value={form[key]} onChange={(e) => setField(key, e.target.value)} />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="hms-collapse">
           <button
             type="button"
             className="hms-collapse-toggle"
-            aria-expanded={addressOpen}
-            onClick={() => setAddressOpen((v) => !v)}
+            aria-expanded={otherOpen}
+            onClick={() => setOtherOpen((v) => !v)}
           >
-            <span className={`hms-collapse-chevron${addressOpen ? '' : ' is-closed'}`} aria-hidden />
-            Address / Contact / Other
+            <span className={`hms-collapse-chevron${otherOpen ? '' : ' is-closed'}`} aria-hidden />
+            Contact / Other
           </button>
-          {addressOpen && (
+          {otherOpen && (
             <div className="hms-collapse-body">
-              <div className="hms-grid hms-grid-2">
-                <div className="hms-box">
-                  <div className="hms-box-title">Contact Address</div>
-                  <div className="hms-grid hms-grid-2" style={{ marginTop: 4 }}>
-                    {(
-                      [
-                        ['village_code', 'Village Code'],
-                        ['contact_address1', 'Village/Address1'],
-                        ['contact_address2', 'Post/Address2'],
-                        ['contact_address3', 'Taluk/Address3'],
-                        ['contact_address4', 'District/Address4'],
-                        ['contact_address5', 'Pin Code'],
-                      ] as const
-                    ).map(([key, label]) => (
-                      <div className="hms-field-wrap" key={key}>
-                        <label>{label}</label>
-                        <input className="hms-field" disabled={locked} value={form[key]} onChange={(e) => setField(key, e.target.value)} />
-                      </div>
-                    ))}
-                  </div>
+              <div className="hms-grid hms-grid-4">
+                <div className="hms-field-wrap">
+                  <label>OLD software Id</label>
+                  <input className="hms-field" disabled={locked} value={form.old_software_id} onChange={(e) => setField('old_software_id', e.target.value)} />
                 </div>
-                <div className="hms-box">
-                  <div className="hms-box-title">Additional Address</div>
-                  <div className="hms-grid hms-grid-2" style={{ marginTop: 4 }}>
-                    {(
-                      [
-                        ['perm_address1', 'Village/Address1'],
-                        ['perm_address2', 'Post/Address2'],
-                        ['perm_address3', 'Taluk/Address3'],
-                        ['perm_address4', 'District/Address4'],
-                        ['perm_address5', 'Pin Code'],
-                      ] as const
-                    ).map(([key, label]) => (
-                      <div className="hms-field-wrap" key={key}>
-                        <label>{label}</label>
-                        <input className="hms-field" disabled={locked} value={form[key]} onChange={(e) => setField(key, e.target.value)} />
-                      </div>
-                    ))}
-                  </div>
+                <div className="hms-field-wrap">
+                  <label>Remarks</label>
+                  <input className="hms-field" disabled={locked} value={form.remarks} onChange={(e) => setField('remarks', e.target.value)} />
                 </div>
-              </div>
-
-              <div className="hms-box">
-                <div className="hms-box-title">Contact / Other</div>
-                <div className="hms-grid hms-grid-4" style={{ marginTop: 4 }}>
-                  <div className="hms-field-wrap">
-                    <label>OLD software Id</label>
-                    <input className="hms-field" disabled={locked} value={form.old_software_id} onChange={(e) => setField('old_software_id', e.target.value)} />
-                  </div>
-                  <div className="hms-field-wrap">
-                    <label>Remarks</label>
-                    <input className="hms-field" disabled={locked} value={form.remarks} onChange={(e) => setField('remarks', e.target.value)} />
-                  </div>
-                  <div className="hms-field-wrap">
-                    <label>Phone</label>
-                    <input className="hms-field" disabled={locked} value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
-                  </div>
-                  <div className="hms-field-wrap">
-                    <label>Mobile</label>
-                    <input className="hms-field" disabled={locked} value={form.mobile} onChange={(e) => setField('mobile', e.target.value)} />
-                  </div>
-                  <div className="hms-field-wrap">
-                    <label>Mobile2</label>
-                    <input className="hms-field" disabled={locked} value={form.mobile2} onChange={(e) => setField('mobile2', e.target.value)} />
-                  </div>
-                  <div className="hms-field-wrap">
-                    <label>Scheme</label>
-                    <input className="hms-field" disabled={locked} value={form.scheme} onChange={(e) => setField('scheme', e.target.value)} />
-                  </div>
-                  <div className="hms-field-wrap">
-                    <label>Aadhar No</label>
-                    <input className="hms-field" disabled={locked} value={form.aadhar_no} onChange={(e) => setField('aadhar_no', e.target.value)} />
-                  </div>
-                  <div className="hms-field-wrap">
-                    <label>Existing</label>
-                    <select
-                      className="hms-field"
-                      disabled={locked}
-                      value={form.is_existing_patient ? 'Y' : 'N'}
-                      onChange={(e) => setField('is_existing_patient', e.target.value === 'Y')}
-                    >
-                      <option value="Y">Y</option>
-                      <option value="N">N</option>
-                    </select>
-                  </div>
-                  <div className="hms-field-wrap">
-                    <label>Patient Type</label>
-                    <select className="hms-field" disabled={locked} value={form.patient_type} onChange={(e) => setField('patient_type', e.target.value)}>
-                      {PATIENT_TYPES.map((t) => (
-                        <option key={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="hms-field-wrap">
-                    <label>Email</label>
-                    <input className="hms-field" disabled={locked} value={form.email} onChange={(e) => setField('email', e.target.value)} />
-                  </div>
+                <div className="hms-field-wrap">
+                  <label>Phone</label>
+                  <input className="hms-field" disabled={locked} value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
+                </div>
+                <div className="hms-field-wrap">
+                  <label>Mobile</label>
+                  <input className="hms-field" disabled={locked} value={form.mobile} onChange={(e) => setField('mobile', e.target.value)} />
+                </div>
+                <div className="hms-field-wrap">
+                  <label>Mobile2</label>
+                  <input className="hms-field" disabled={locked} value={form.mobile2} onChange={(e) => setField('mobile2', e.target.value)} />
+                </div>
+                <div className="hms-field-wrap">
+                  <label>Scheme</label>
+                  <input className="hms-field" disabled={locked} value={form.scheme} onChange={(e) => setField('scheme', e.target.value)} />
+                </div>
+                <div className="hms-field-wrap">
+                  <label>Existing</label>
+                  <select
+                    className="hms-field"
+                    disabled={locked}
+                    value={form.is_existing_patient ? 'Y' : 'N'}
+                    onChange={(e) => setField('is_existing_patient', e.target.value === 'Y')}
+                  >
+                    <option value="Y">Y</option>
+                    <option value="N">N</option>
+                  </select>
+                </div>
+                <div className="hms-field-wrap">
+                  <label>Patient Type</label>
+                  <select className="hms-field" disabled={locked} value={form.patient_type} onChange={(e) => setField('patient_type', e.target.value)}>
+                    {PATIENT_TYPES.map((t) => (
+                      <option key={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="hms-field-wrap">
+                  <label>Email</label>
+                  <input className="hms-field" disabled={locked} value={form.email} onChange={(e) => setField('email', e.target.value)} />
                 </div>
               </div>
             </div>
@@ -540,7 +541,12 @@ export function PatientMasterPage() {
         </div>
 
         <div className="hms-actions hms-actions-spread">
-          <button className={`hms-btn ${mode === 'Delete' ? 'hms-btn-danger' : 'hms-btn-primary'}`} type="submit" disabled={busy}>
+          <button
+            className={`hms-btn ${mode === 'Delete' ? 'hms-btn-danger' : 'hms-btn-primary'}`}
+            type="submit"
+            data-save-shortcut
+            disabled={busy}
+          >
             {busy ? '…' : mode === 'Create' ? 'Save' : mode === 'Modify' ? 'Update' : 'Delete'}
           </button>
           <div className="hms-actions-left">
@@ -563,7 +569,7 @@ export function PatientMasterPage() {
         </div>
       </form>
 
-      <div className="hms-table-wrap" style={{ marginTop: 10 }}>
+      <div className="hms-table-wrap" style={{ marginTop: 4 }}>
         <table className="hms-table">
           <thead>
             <tr>

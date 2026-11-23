@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from modules.hospital.hms.models.patient_service_master import PatientServiceMaster
-from modules.hospital.hms.models.service_category import ServiceCategory
+from modules.hospital.hms.models.service_group import ServiceGroup
 from modules.hospital.hms.repositories.base import BaseRepository
 
 _PS_CODE_RE = re.compile(r"^PS(\d+)$", re.IGNORECASE)
@@ -39,22 +39,22 @@ class PatientServiceMasterRepository(BaseRepository[PatientServiceMaster]):
         return "PS1"
 
     async def list_active(
-        self, *, exclude_category_codes: tuple[str, ...] = ()
+        self, *, exclude_group_codes: tuple[str, ...] = ()
     ) -> list[PatientServiceMaster]:
         stmt = (
             select(PatientServiceMaster)
             .options(
                 selectinload(PatientServiceMaster.doctor),
-                selectinload(PatientServiceMaster.category),
+                selectinload(PatientServiceMaster.group),
                 selectinload(PatientServiceMaster.sub_category),
             )
             .where(PatientServiceMaster.is_active.is_(True))
         )
-        if exclude_category_codes:
-            stmt = stmt.outerjoin(PatientServiceMaster.category).where(
+        if exclude_group_codes:
+            stmt = stmt.outerjoin(PatientServiceMaster.group).where(
                 or_(
-                    PatientServiceMaster.category_id.is_(None),
-                    ServiceCategory.code.notin_(exclude_category_codes),
+                    PatientServiceMaster.group_id.is_(None),
+                    ServiceGroup.code.notin_(exclude_group_codes),
                 )
             )
         result = await self.session.execute(
@@ -67,7 +67,7 @@ class PatientServiceMasterRepository(BaseRepository[PatientServiceMaster]):
             select(PatientServiceMaster)
             .options(
                 selectinload(PatientServiceMaster.doctor),
-                selectinload(PatientServiceMaster.category),
+                selectinload(PatientServiceMaster.group),
                 selectinload(PatientServiceMaster.sub_category),
             )
             .where(PatientServiceMaster.code == code)
@@ -79,7 +79,7 @@ class PatientServiceMasterRepository(BaseRepository[PatientServiceMaster]):
             select(PatientServiceMaster)
             .options(
                 selectinload(PatientServiceMaster.doctor),
-                selectinload(PatientServiceMaster.category),
+                selectinload(PatientServiceMaster.group),
                 selectinload(PatientServiceMaster.sub_category),
             )
             .where(PatientServiceMaster.id == service_id)

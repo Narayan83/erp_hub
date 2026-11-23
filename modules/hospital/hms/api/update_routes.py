@@ -1,4 +1,4 @@
-"""Serve the update package to client PCs over the API they already talk to.
+r"""Serve the update package to client PCs over the API they already talk to.
 
 Clients previously read the zip from \\SERVER\HMSUpdates, which only works if an
 administrator created that SMB share by hand. These routes are unauthenticated on

@@ -7,7 +7,7 @@ from modules.hospital.hms.services.authority import AuthorityService
 from modules.hospital.hms.services.billing_package import BillingPackageService
 from modules.hospital.hms.services.billing_structure import BillingStructureService
 from modules.hospital.hms.services.billing_type import BillingTypeService
-from modules.hospital.hms.services.service_category import ServiceCategoryService
+from modules.hospital.hms.services.service_group import ServiceGroupService
 from modules.hospital.hms.services.service_sub_category import ServiceSubCategoryService
 from modules.hospital.hms.services.department import DepartmentService
 from modules.hospital.hms.services.doctor import DoctorService
@@ -45,7 +45,7 @@ class AppDataService:
             roles,
             patient_no_formats,
             patient_services,
-            service_categories,
+            service_groups,
             service_sub_categories,
             billing_packages,
             hospital_profile,
@@ -65,7 +65,7 @@ class AppDataService:
             RoleManagementService(self.session).list_roles(),
             PatientNoFormatService(self.session).list_formats(),
             PatientServiceMasterService(self.session).list_services(),
-            ServiceCategoryService(self.session).list_categories(),
+            ServiceGroupService(self.session).list_groups(),
             ServiceSubCategoryService(self.session).list_sub_categories(),
             BillingPackageService(self.session).list_packages(),
             HospitalProfileService(self.session).get_profile(),
@@ -87,7 +87,7 @@ class AppDataService:
             roles=roles,
             patient_no_formats=patient_no_formats,
             patient_services=patient_services,
-            service_categories=service_categories,
+            service_groups=service_groups,
             service_sub_categories=service_sub_categories,
             billing_packages=billing_packages,
             hospital_profile=hospital_profile,

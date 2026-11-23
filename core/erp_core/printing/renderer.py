@@ -13,6 +13,7 @@ from erp_core.printing.layouts import (
     paper_mm,
     resolve_format,
 )
+from erp_core.printing.page_size_stamp import orient_page_mm
 
 
 def _esc(value: Any) -> str:
@@ -771,109 +772,105 @@ def _sheet_boxes(
     fit_detail: bool = False,
     detail_boxes: bool = True,
 ) -> dict[str, Any] | None:
-    """Boxes in the same places as the template designer, one line each."""
-    if free_place:
-        return _free_sheet_boxes(
-            bands,
-            context,
-            paper_w=paper_w,
-            paper_h=paper_h,
-            top=top,
-            right=right,
-            bottom=bottom,
-            left=left,
-            border=border,
-            trim=trim,
-            fit_detail=fit_detail,
-            detail_boxes=detail_boxes,
-        )
-    visible = [
+    """Boxes in the same places as the template designer, one line each.
+
+    The designer canvas always works in absolute millimetres. Previously we
+    required *every* visible field to have x/y or we threw the sheet away and
+    fell back to the old stacked HTML — so print ignored the saved design.
+    Now any placed field is enough to paint the designer sheet.
+    """
+    placed = [
         field
         for fields in bands.values()
         for field in fields
-        if field.get("visible")
+        if field.get("visible") and _mm(field, "x_mm", "xMm") is not None
     ]
-    if not visible or any(_mm(field, "x_mm", "xMm") is None for field in visible):
+    if not placed and not free_place:
         return None
-    content_w = max(12.0, paper_w - left - right)
-    fitted = _fit_placed_bands(bands, content_w)
-    boxes: list[dict[str, Any]] = []
-    y = top
-    for band in ("header", "meta", "columns", "totals", "footer"):
-        fields = [
-            field
-            for field in fitted.get(band) or []
-            if field.get("visible") and _mm(field, "x_mm", "xMm") is not None
-        ]
-        if not fields:
+    # Free-place and packed designs both keep the canvas coordinates.
+    return _free_sheet_boxes(
+        bands,
+        context,
+        paper_w=paper_w,
+        paper_h=paper_h,
+        top=top,
+        right=right,
+        bottom=bottom,
+        left=left,
+        border=border,
+        trim=trim,
+        fit_detail=fit_detail,
+        detail_boxes=detail_boxes,
+    )
+
+
+def _sheet_box_style(box: dict[str, Any]) -> str:
+    x = float(box.get("x") or 0)
+    y = float(box.get("y") or 0)
+    w = float(box.get("w") or 0)
+    h = float(box.get("h") or 0)
+    family = str(box.get("family") or "Times New Roman").replace("'", "")
+    pt = float(box.get("pt") or 10)
+    align = str(box.get("align") or "left")
+    parts = [
+        "position:absolute",
+        f"left:{x:g}mm",
+        f"top:{y:g}mm",
+        f"width:{max(0.2, w):g}mm",
+        f"height:{max(0.2, h):g}mm",
+        "box-sizing:border-box",
+        "overflow:hidden",
+        f"font-family:'{family}',Times,serif",
+        f"font-size:{pt:g}pt",
+        f"font-weight:{'700' if box.get('bold') else '400'}",
+        f"font-style:{'italic' if box.get('italic') else 'normal'}",
+        f"text-decoration:{'underline' if box.get('underline') else 'none'}",
+        f"text-align:{align}",
+        "white-space:pre-wrap",
+        "line-height:1.15",
+        "color:#000",
+        "margin:0",
+        "padding:0",
+    ]
+    shape = str(box.get("shape") or "")
+    line = str(box.get("line") or "")
+    if line == "h":
+        parts.extend(["border-top:1px solid #000", "height:0", "overflow:visible", "font-size:0"])
+    elif line == "v":
+        parts.extend(["border-left:1px solid #000", "width:0", "overflow:visible", "font-size:0"])
+    elif shape in {"ellipse", "round"}:
+        parts.extend(["border:1px solid #000", "border-radius:50%"])
+    elif shape in {"rect", "square", "triangle", "diamond"} or box.get("border"):
+        parts.append("border:1px solid #000")
+    if box.get("rule"):
+        parts.extend(["border-top:1px solid #000", "padding-top:2px"])
+    try:
+        rotate = float(box.get("rotate") or 0)
+    except (TypeError, ValueError):
+        rotate = 0.0
+    if abs(rotate) > 0.05:
+        parts.append(f"transform:rotate({rotate:g}deg)")
+        parts.append("transform-origin:center center")
+    return ";".join(parts)
+
+
+def _sheet_to_html(sheet: dict[str, Any]) -> str:
+    """Paint designer boxes as real absolute HTML so print matches the template canvas."""
+    width = float(sheet.get("w") or 210)
+    height = float(sheet.get("h") or 297)
+    border = "border:1px solid #000;" if sheet.get("border") else ""
+    bits: list[str] = []
+    for box in sheet.get("boxes") or []:
+        if not isinstance(box, dict):
             continue
-        if band == "columns":
-            height = max(_line_mm(field, band) for field in fields)
-            for field in sorted(fields, key=lambda item: _mm(item, "x_mm", "xMm") or 0):
-                boxes.append(
-                    _box(
-                        field,
-                        x=left + (_mm(field, "x_mm", "xMm") or 0),
-                        y=y,
-                        width=_mm(field, "width_mm", "widthMm") or 10,
-                        height=height,
-                        text=str(field.get("label") or ""),
-                        band=band,
-                        border=detail_boxes,
-                    )
-                )
-            y += height
-            for line in context.get("lines") or []:
-                if not isinstance(line, dict):
-                    continue
-                for field in sorted(fields, key=lambda item: _mm(item, "x_mm", "xMm") or 0):
-                    value = _field_text(field, context, line)
-                    boxes.append(
-                        _box(
-                            field,
-                            x=left + (_mm(field, "x_mm", "xMm") or 0),
-                            y=y,
-                            width=_mm(field, "width_mm", "widthMm") or 10,
-                            height=height,
-                            text="" if value is None else str(value),
-                            band=band,
-                            border=detail_boxes,
-                        )
-                    )
-                y += height
-            y += 0.6
-            continue
-        for row in _rows_by_y(fields):
-            height = max(_line_mm(field, band) for field in row)
-            for field in row:
-                text = _placed_body(field, context, band)
-                if not str(text).strip():
-                    continue
-                boxes.append(
-                    _box(
-                        field,
-                        x=left + (_mm(field, "x_mm", "xMm") or 0),
-                        y=y,
-                        width=_mm(field, "width_mm", "widthMm") or 10,
-                        height=height,
-                        text=str(text),
-                        band=band,
-                    )
-                )
-            y += height
-        y += 0.4
-    if not boxes:
-        return None
-    boxes = _fit_detail_boxes(boxes, paper_h, bottom, enabled=fit_detail)
-    if trim and not fit_detail:
-        paper_h = max(40.0, max(box["y"] + box["h"] for box in boxes) + bottom)
-    return {
-        "w": paper_w,
-        "h": paper_h,
-        "border": border,
-        "margin": [top, right, bottom, left],
-        "boxes": boxes,
-    }
+        text = "" if box.get("line") or box.get("shape") else _esc(box.get("text") or "")
+        bits.append(f"<div class='hms-box' style='{_sheet_box_style(box)}'>{text}</div>")
+    return (
+        f"<div class='hms-sheet' style='position:relative;width:{width:g}mm;height:{height:g}mm;"
+        f"{border}margin:0;padding:0;overflow:hidden;background:#fff'>"
+        + "".join(bits)
+        + "</div>"
+    )
 
 
 def render_bill_html(context: dict[str, Any], layout: dict[str, Any], bill_format: str | None) -> str:
@@ -881,8 +878,7 @@ def render_bill_html(context: dict[str, Any], layout: dict[str, Any], bill_forma
     bands = layout_for_format(layout, fmt)
     width, height = paper_mm(layout, fmt)
     orientation = ((layout.get("page") or {}).get(fmt) or {}).get("orientation") or "portrait"
-    if orientation == "landscape":
-        width, height = height, width
+    width, height, orientation = orient_page_mm(width, height, str(orientation), fmt)
     inner = "".join(_band_html(name, bands[name], context, width) for name in ("header", "meta", "columns", "totals", "footer"))
     top, right, bottom, left, border = page_insets(layout, fmt)
     page_meta = ((layout.get("page") or {}).get(fmt) or {})
@@ -897,12 +893,8 @@ def render_bill_html(context: dict[str, Any], layout: dict[str, Any], bill_forma
             "<table width='100%' cellspacing='0' cellpadding='2' style='border:1px solid #000;'>"
             f"<tr><td>{inner}</td></tr></table>"
         )
-    margin_css = f"margin:{top:g}mm {right:g}mm {bottom:g}mm {left:g}mm;"
-    page_css = (
-        f"@page{{size:{width:g}mm {height:g}mm;{margin_css}}}"
-        if orientation == "portrait"
-        else f"@page{{size:{width:g}mm {height:g}mm landscape;{margin_css}}}"
-    )
+    # Designer coordinates already include page margins — keep @page margin at 0 so print matches canvas.
+    page_css = f"@page{{size:{width:g}mm {height:g}mm;margin:0;}}"
     sheet = _sheet_boxes(
         bands,
         context,
@@ -937,24 +929,27 @@ def render_bill_html(context: dict[str, Any], layout: dict[str, Any], bill_forma
         )
     if sheet and trim:
         height = float(sheet["h"])
-        page_css = (
-            f"@page{{size:{width:g}mm {height:g}mm;{margin_css}}}"
-            if orientation == "portrait"
-            else f"@page{{size:{width:g}mm {height:g}mm landscape;{margin_css}}}"
+        page_css = f"@page{{size:{width:g}mm {height:g}mm;margin:0;}}"
+    # Prefer the absolute sheet (matches designer drag positions). Fall back to band tables.
+    if sheet is not None:
+        body = _sheet_to_html(sheet)
+        layout_mode = "sheet-free" if free_place else "sheet"
+    else:
+        body = (
+            f"<div class='hms-flow' style='padding:{top:g}mm {right:g}mm {bottom:g}mm {left:g}mm;'>"
+            f"{inner}</div>"
         )
-    sheet_tag = ""
-    if sheet:
-        payload = json.dumps(sheet, ensure_ascii=True, separators=(",", ":")).replace("<", "\\u003c")
-        sheet_tag = f"<script type='application/json' id='hms-sheet'>{payload}</script>"
+        layout_mode = "flow"
     return (
         "<!DOCTYPE html><html><head><meta charset='utf-8'/>"
         f"<title>{_esc(context.get('bill_title') or 'Bill')}</title>"
         f"<style>{page_css}"
-        "body{font-family:'Times New Roman',Times,serif;color:#000;margin:0;padding:0;}"
-        "table{border-collapse:collapse;}</style></head>"
+        "html,body{font-family:'Times New Roman',Times,serif;color:#000;margin:0;padding:0;}"
+        "table{border-collapse:collapse;}"
+        ".hms-sheet,.hms-flow{color:#000;}</style></head>"
         f"<body data-page-w='{width}' data-page-h='{height}' data-page-orientation='{orientation}' "
-        f"data-page-format='{_esc(fmt)}'>"
-        f"{sheet_tag}{inner}</body></html>"
+        f"data-page-format='{_esc(fmt)}' data-layout-source='designed' data-layout-mode='{layout_mode}'>"
+        f"{body}</body></html>"
     )
 
 

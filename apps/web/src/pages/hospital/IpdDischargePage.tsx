@@ -86,7 +86,7 @@ export function IpdDischargePage({ mode = 'create', initialBillId }: Props) {
         api.get<Ward[]>('/hospital/wards'),
         api.get<CatalogService[]>('/hospital/ipd-discharge/catalog/services'),
         api.get<PayMode[]>('/hospital/payment-modes').catch(() => api.get<PayMode[]>('/accounts/payment-modes')),
-        api.get<Array<{ id: string; name: string }>>('/hospital/service-categories'),
+        api.get<Array<{ id: string; name: string }>>('/hospital/service-groups'),
       ])
       setDoctors(docs)
       setWards(w || [])
@@ -103,7 +103,7 @@ export function IpdDischargePage({ mode = 'create', initialBillId }: Props) {
     const q = catalogSearch.trim().toLowerCase()
     setCatalogRows(
       catalogAll
-        .filter((s) => !categoryId || s.category_id === categoryId)
+        .filter((s) => !categoryId || s.group_id === categoryId)
         .filter((s) => !q || s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q))
         .map((s) => ({ ...s, qty: 1, checked: false, rate: money(s.rate) })),
     )
@@ -222,7 +222,7 @@ export function IpdDischargePage({ mode = 'create', initialBillId }: Props) {
           service_id: row.id,
           service_code: row.code,
           service_name: row.name,
-          category_name: row.category_name,
+          category_name: row.group_name,
           quantity: row.qty || 1,
           rate: money(row.rate),
         })
@@ -518,11 +518,11 @@ export function IpdDischargePage({ mode = 'create', initialBillId }: Props) {
             <select
               className="hms-field"
               style={{ maxWidth: 160 }}
-              aria-label="Category"
+              aria-label="Service Group"
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
             >
-              <option value="">All Categories</option>
+              <option value="">All Service Groups</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -543,7 +543,7 @@ export function IpdDischargePage({ mode = 'create', initialBillId }: Props) {
                   <th style={{ width: 50 }}>Qty</th>
                   <th style={{ width: 80 }}>Rate</th>
                   <th style={{ width: 70 }}>Code</th>
-                  <th style={{ width: 90 }}>Category</th>
+                  <th style={{ width: 110 }}>Service Group</th>
                 </tr>
               </thead>
               <tbody>
@@ -577,7 +577,7 @@ export function IpdDischargePage({ mode = 'create', initialBillId }: Props) {
                     </td>
                     <td>{money(r.rate).toFixed(2)}</td>
                     <td>{r.code}</td>
-                    <td>{r.category_name}</td>
+                    <td>{r.group_name}</td>
                   </tr>
                 ))}
               </tbody>
@@ -603,7 +603,7 @@ export function IpdDischargePage({ mode = 'create', initialBillId }: Props) {
                   <th style={{ width: 80 }}>Rate</th>
                   <th style={{ width: 90 }}>Amount</th>
                   <th style={{ width: 70 }}>Code</th>
-                  <th style={{ width: 90 }}>Category</th>
+                  <th style={{ width: 110 }}>Service Group</th>
                 </tr>
               </thead>
               <tbody>

@@ -1,6 +1,15 @@
 from fastapi import APIRouter
 
-from erp_core.api.endpoints import accounts, auth, company, parties, print_configs, user_types, users
+from erp_core.api.endpoints import (
+    accounts,
+    auth,
+    company,
+    dashboard_shortcuts,
+    parties,
+    print_configs,
+    user_types,
+    users,
+)
 
 core_router = APIRouter()
 core_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -12,3 +21,4 @@ core_router.include_router(accounts.router, prefix="/accounts", tags=["accounts"
 # router first (GenERP) keeps that implementation.
 core_router.include_router(users.router, prefix="/users", tags=["users"])
 core_router.include_router(user_types.router, prefix="/user-types", tags=["user-types"])
+core_router.include_router(dashboard_shortcuts.router, prefix="/dashboard", tags=["shortcuts"])

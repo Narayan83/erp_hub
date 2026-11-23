@@ -23,7 +23,7 @@ export function ResultTemplatePage() {
       listPath="/hospital/pathology/result-templates"
       defaults={{ body: '', sort_order: 0, is_active: true }}
       fields={[
-        { key: 'code', label: 'Code', readOnlyAlways: true, placeholder: 'Auto' },
+        { key: 'code', label: 'Code', placeholder: 'Auto', readOnlyOnModify: true },
         { key: 'name', label: 'Template Name', required: true },
         { key: 'sort_order', label: 'Sort Order', type: 'number' },
         { key: 'parameter_id', label: 'Parameter', type: 'select', options: params.options },
@@ -31,6 +31,7 @@ export function ResultTemplatePage() {
         { key: 'body', label: 'Template Body', type: 'textarea' },
       ]}
       mapCreate={(f) => ({
+        code: String(f.code ?? '').trim() || null,
         name: f.name,
         body: f.body || '',
         parameter_id: nullable(f.parameter_id),

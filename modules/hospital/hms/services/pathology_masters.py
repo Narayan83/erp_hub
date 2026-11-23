@@ -14,7 +14,7 @@ from modules.hospital.hms.models.pathology_result_template import PathologyResul
 from modules.hospital.hms.models.pathology_service_member import PathologyServiceMember
 from modules.hospital.hms.models.pathology_unit import PathologyUnit
 from modules.hospital.hms.models.patient_service_master import PatientServiceMaster
-from modules.hospital.hms.models.service_category import ServiceCategory
+from modules.hospital.hms.models.service_group import ServiceGroup
 from modules.hospital.hms.repositories.pathology_bill import PathologyBillRepository
 from modules.hospital.hms.repositories.pathology_masters import (
     ORDER_STATUS_BILLED,
@@ -317,7 +317,7 @@ class PathologyMastersService:
 
     async def _lab_category_id(self) -> str:
         result = await self.session.execute(
-            select(ServiceCategory).where(ServiceCategory.code == self.LAB_CATEGORY_CODE)
+            select(ServiceGroup).where(ServiceGroup.code == self.LAB_CATEGORY_CODE)
         )
         cat = result.scalar_one_or_none()
         if not cat:
@@ -331,11 +331,11 @@ class PathologyMastersService:
         result = await self.session.execute(
             select(PatientServiceMaster)
             .options(
-                selectinload(PatientServiceMaster.category),
+                selectinload(PatientServiceMaster.group),
                 selectinload(PatientServiceMaster.sub_category),
             )
             .where(PatientServiceMaster.is_active.is_(True))
-            .where(PatientServiceMaster.category_id == cat_id)
+            .where(PatientServiceMaster.group_id == cat_id)
             .order_by(PatientServiceMaster.name)
         )
         items = []
@@ -344,7 +344,7 @@ class PathologyMastersService:
             items.append(
                 read.model_copy(
                     update={
-                        "category_name": row.category.name if row.category else None,
+                        "group_name": row.group.name if row.group else None,
                         "sub_category_name": row.sub_category.name if row.sub_category else None,
                     }
                 )
@@ -363,7 +363,7 @@ class PathologyMastersService:
         if existing:
             existing.name = data.name.strip()
             existing.rate = data.rate
-            existing.category_id = cat_id
+            existing.group_id = cat_id
             existing.sub_category_id = data.sub_category_id
             existing.is_service_active = True
             existing.is_active = True
@@ -374,7 +374,7 @@ class PathologyMastersService:
             name=data.name.strip(),
             rate=data.rate,
             service_charge=data.rate,
-            category_id=cat_id,
+            group_id=cat_id,
             sub_category_id=data.sub_category_id,
             is_sharing=False,
             discount_apply=False,

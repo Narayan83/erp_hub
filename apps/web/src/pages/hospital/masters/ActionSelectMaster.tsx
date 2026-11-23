@@ -1,5 +1,6 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react'
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../api/client'
+import { fetchBlob } from '../shared/hmsKit'
 import '../billing/hms-master.css'
 
 export type MasterMode = 'Create' | 'Modify' | 'Delete'
@@ -33,6 +34,11 @@ type Props = {
   defaults?: Record<string, string | number | boolean>
   extraToolbar?: ReactNode
   listParams?: Record<string, string | number | boolean>
+  spreadsheet?: {
+    importPath: string
+    templatePath: string
+    templateFilename: string
+  }
 }
 
 export function ActionSelectMaster({
@@ -52,6 +58,7 @@ export function ActionSelectMaster({
   defaults = {},
   extraToolbar,
   listParams,
+  spreadsheet,
 }: Props) {
   const [mode, setMode] = useState<MasterMode>('Create')
   const [rows, setRows] = useState<Record<string, unknown>[]>([])
@@ -60,6 +67,9 @@ export function ActionSelectMaster({
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [fileBusy, setFileBusy] = useState<'' | 'template' | 'import'>('')
+  const fileRef = useRef<HTMLInputElement>(null)
+  const locked = busy || fileBusy !== ''
 
   const postPath = createPath || listPath
 
@@ -142,6 +152,63 @@ export function ActionSelectMaster({
     }
   }
 
+  async function downloadTemplate() {
+    if (!spreadsheet) return
+    setFileBusy('template')
+    setError(null)
+    setOk(null)
+    try {
+      const blob = await fetchBlob(spreadsheet.templatePath)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = spreadsheet.templateFilename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setFileBusy('')
+    }
+  }
+
+  async function importSpreadsheet(file: File) {
+    if (!spreadsheet) return
+    const lower = file.name.toLowerCase()
+    if (!lower.endsWith('.xlsx') && !lower.endsWith('.csv')) {
+      setError('Use the Excel template (.xlsx) or a .csv file.')
+      setOk(null)
+      return
+    }
+    setFileBusy('import')
+    setError(null)
+    setOk(null)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const result = await api.upload<{
+        created: number
+        skipped: number
+        errors: string[]
+        message: string
+      }>(spreadsheet.importPath, body)
+      const issues = Array.isArray(result.errors) ? result.errors : []
+      if (result.created > 0) {
+        setOk(result.message)
+        if (issues.length) setError(issues.join('\n'))
+        await load()
+      } else {
+        setError(issues.length ? `${result.message}\n${issues.join('\n')}` : result.message || 'Nothing imported.')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setFileBusy('')
+    }
+  }
+
   return (
     <div className="hms-page">
       <h1>{title}</h1>
@@ -171,6 +238,27 @@ export function ActionSelectMaster({
             </option>
           ))}
         </select>
+        {spreadsheet && (
+          <>
+            <button type="button" className="hms-btn" disabled={locked} onClick={() => void downloadTemplate()}>
+              {fileBusy === 'template' ? 'Downloading…' : 'Excel Template'}
+            </button>
+            <button type="button" className="hms-btn" disabled={locked} onClick={() => fileRef.current?.click()}>
+              {fileBusy === 'import' ? 'Importing…' : 'Import Excel'}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (file) void importSpreadsheet(file)
+              }}
+            />
+          </>
+        )}
         {extraToolbar}
       </div>
 
@@ -229,7 +317,7 @@ export function ActionSelectMaster({
           ))}
         </div>
         <div className="hms-actions">
-          <button className={`hms-btn ${mode === 'Delete' ? 'hms-btn-danger' : 'hms-btn-primary'}`} type="submit" disabled={busy}>
+          <button className={`hms-btn ${mode === 'Delete' ? 'hms-btn-danger' : 'hms-btn-primary'}`} type="submit" disabled={locked}>
             {busy ? '…' : mode === 'Create' ? 'Save' : mode === 'Modify' ? 'Update' : 'Delete'}
           </button>
           <button

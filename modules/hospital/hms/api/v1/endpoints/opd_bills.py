@@ -16,14 +16,14 @@ router = APIRouter()
 
 @router.get("/catalog/services", response_model=list[BillingServiceCatalogItem])
 async def list_billing_services(
-    category_id: str | None = Query(None),
+    group_id: str | None = Query(None),
     sub_category_id: str | None = Query(None),
     search: str | None = Query(None, max_length=100),
     _: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     return await OpdBillService(session).list_catalog(
-        category_id=category_id,
+        group_id=group_id,
         sub_category_id=sub_category_id,
         search=search,
     )

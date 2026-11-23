@@ -1,16 +1,14 @@
 import { ActionSelectMaster } from './ActionSelectMaster'
 
 /**
- * Service Groups (legacy CMASTER/SG). The HMS API groups services by Service Category, so this
- * page maintains `/hospital/service-categories`; services are attached via
- * “Assign Services To Group”.
+ * Service Groups. Services are attached via “Assign Services To Group”.
  */
 export function ServiceGroupPage() {
   return (
     <ActionSelectMaster
       title="Service Groups"
-      hint="Service groups are stored as Service Categories on the hospital API."
-      listPath="/hospital/service-categories"
+      hint="A service shows under a group on OPD and IPD bills after it is assigned to that group."
+      listPath="/hospital/service-groups"
       defaults={{ code: '', name: '', sort_order: 0 }}
       fields={[
         { key: 'code', label: 'Code', placeholder: 'Auto', readOnlyOnModify: true },

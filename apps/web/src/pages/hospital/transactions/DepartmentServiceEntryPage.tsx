@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { api } from '../../../api/client'
 import '../billing/hms-master.css'
-import { openHospitalReport } from '../billing/report'
+import { HospitalPrintPreview, opdBillPrintJob, type HospitalPrintJob } from '../billing/HospitalPrintPreview'
 import { Banner, Box, FieldWrap, FoundPatient, PatientFind } from '../shared/hmsKit'
 import { errMsg, fmtMoney, todayIso, unwrapList } from '../shared/hmsShared'
 
@@ -29,6 +29,8 @@ export function DepartmentServiceEntryPage() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
   const [lines, setLines] = useState<Line[]>([])
   const [savedId, setSavedId] = useState<string | null>(null)
+  const [savedBillNo, setSavedBillNo] = useState('')
+  const [printJob, setPrintJob] = useState<HospitalPrintJob | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -84,6 +86,7 @@ export function DepartmentServiceEntryPage() {
     setLines([])
     setCatalog([])
     setSavedId(null)
+    setSavedBillNo('')
   }
 
   async function save() {
@@ -111,6 +114,7 @@ export function DepartmentServiceEntryPage() {
         })),
       })
       setSavedId(saved.id)
+      setSavedBillNo(saved.bill_no || '')
       setOk(`Saved bill ${saved.bill_no}`)
       setLines([])
       setPatient(null)
@@ -131,7 +135,7 @@ export function DepartmentServiceEntryPage() {
           <button
             className="hms-btn"
             type="button"
-            onClick={() => void openHospitalReport(`/hospital/reports/opd-bill/${savedId}/html`).catch((e) => setError(errMsg(e)))}
+            onClick={() => setPrintJob(opdBillPrintJob(savedId, savedBillNo))}
           >
             Print last bill
           </button>
@@ -294,6 +298,7 @@ export function DepartmentServiceEntryPage() {
           Clear
         </button>
       </div>
+      {printJob ? <HospitalPrintPreview job={printJob} onClose={() => setPrintJob(null)} /> : null}
     </div>
   )
 }

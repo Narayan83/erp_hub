@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { formatDate } from '../lib/dates'
 import type { Ledger, Txn } from '../types'
 
 export function LedgerTable({
@@ -53,7 +54,7 @@ export function LedgerTable({
           <tbody>
             {rows.map((r: Txn) => (
               <tr key={r.id}>
-                <td>{r.txn_date ?? ''}</td>
+                <td>{formatDate(r.txn_date)}</td>
                 <td>{r.kind_label}</td>
                 <td>{r.rno}</td>
                 <td>{r.kind === 'share_addition' ? r.amount : ''}</td>

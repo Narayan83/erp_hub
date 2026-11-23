@@ -12,7 +12,7 @@ export function PharmacyItemPage({ itemType, title }: Props) {
       labelKey="name"
       defaults={{ code: '', name: '', mrp: 0, item_type: itemType }}
       fields={[
-        { key: 'code', label: 'Code', required: true },
+        { key: 'code', label: 'Code', placeholder: 'Auto', readOnlyOnModify: true },
         { key: 'name', label: 'Name', required: true },
         { key: 'mrp', label: 'MRP', type: 'number' },
       ]}
@@ -23,7 +23,7 @@ export function PharmacyItemPage({ itemType, title }: Props) {
         { key: 'item_type', label: 'Type' },
       ]}
       mapCreate={(form) => ({
-        code: form.code || null,
+        code: String(form.code ?? '').trim() || null,
         name: form.name,
         item_type: itemType,
         mrp: Number(form.mrp) || 0,

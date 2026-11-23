@@ -33,7 +33,7 @@ from modules.kramcop.kc.schemas import (
 from modules.kramcop.kc.services.access import MENU_CATALOG, set_role_menus
 from modules.kramcop.kc.services.audit import list_audit, write_audit
 from modules.kramcop.kc.services.auth import create_user, get_setting, list_users, set_setting, to_user_info, update_user
-from modules.kramcop.kc.services.ledger import balances_by_acno
+from modules.kramcop.kc.services.ledger import balances_by_acno, balances_by_acno_share_type
 from modules.kramcop.kc.services.members import compose_name_en, compose_name_kn
 
 router = APIRouter()
@@ -375,21 +375,157 @@ async def share_schedule(
     return ScheduleList(items=items, total=total, page=page, page_size=page_size)
 
 
-@router.get("/reports/share-summary", response_model=SummaryList)
-async def share_summary(
-    as_on: str | None = None,
-    balance: str = "positive",
-    language: str = "kn",
-    session: AsyncSession = Depends(get_db),
-    _user: User = Depends(get_current_user),
-):
+def _lang_text(language: str, en: str, kn: str) -> str:
+    if language == "kn":
+        return (kn or en or "").strip()
+    return (en or kn or "").strip()
+
+
+def _share_type_label(code: int, prefix: str, name: str) -> str:
+    parts = [p for p in ((prefix or "").strip(), (name or "").strip()) if p]
+    if parts:
+        return " · ".join(parts)
+    return str(code) if code else ""
+
+
+_SUMMARY_EXPORT_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("acno", "ACNO"),
+    ("name", "Name"),
+    ("share_no", "Share no"),
+    ("village", "Village"),
+    ("post", "Post"),
+    ("taluk", "Taluk"),
+    ("district", "District"),
+    ("category", "Category"),
+    ("sex", "Sex"),
+    ("mobile", "Mobile"),
+    ("phone", "Phone"),
+    ("share_type", "Share type"),
+    ("balance", "Balance"),
+)
+
+
+def _summary_export_columns(raw: str) -> list[tuple[str, str]]:
+    if (raw or "").strip() == "-":
+        return []
+    by_key = dict(_SUMMARY_EXPORT_COLUMNS)
+    wanted = [part.strip() for part in (raw or "").split(",") if part.strip()]
+    if not wanted:
+        return list(_SUMMARY_EXPORT_COLUMNS)
+    picked: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for key in wanted:
+        if key in by_key and key not in seen:
+            picked.append((key, by_key[key]))
+            seen.add(key)
+    return picked or list(_SUMMARY_EXPORT_COLUMNS)
+
+
+def _summary_export_value(row: SummaryRow, key: str, language: str):
+    if key == "acno":
+        return row.acno
+    if key == "balance":
+        return row.balance
+    if key == "share_type":
+        return row.share_type_label or (str(row.share_type_code) if row.share_type_code else "")
+    return _summary_filter_text(row, key, language)
+
+
+def _summary_filter_text(row: SummaryRow, key: str, language: str) -> str:
+    if key == "acno":
+        return str(row.acno)
+    if key == "name":
+        return _lang_text(language, row.name_en, row.name_kn)
+    if key == "share_no":
+        return row.share_no
+    if key == "village":
+        return _lang_text(language, row.village_en, row.village_kn)
+    if key == "post":
+        return _lang_text(language, row.post_en, row.post_kn)
+    if key == "taluk":
+        return _lang_text(language, row.taluk_en, row.taluk_kn)
+    if key == "district":
+        return _lang_text(language, row.district_en, row.district_kn)
+    if key == "category":
+        return row.category
+    if key == "sex":
+        return row.sex
+    if key == "mobile":
+        return row.mobile
+    if key == "phone":
+        return row.phone
+    if key == "share_type":
+        code = str(row.share_type_code) if row.share_type_code else ""
+        return " ".join(p for p in (row.share_type_label, code) if p)
+    if key == "balance":
+        return f"{row.balance:.2f}"
+    return ""
+
+
+def _apply_summary_view(
+    items: list[SummaryRow],
+    *,
+    language: str,
+    share_type: int | None,
+    text_filters: dict[str, str],
+    sort: str,
+    sort_dir: str,
+) -> list[SummaryRow]:
+    out: list[SummaryRow] = []
+    for row in items:
+        if share_type is not None and row.share_type_code != share_type:
+            continue
+        matched = True
+        for key, needle in text_filters.items():
+            query = (needle or "").strip().lower()
+            if not query:
+                continue
+            text = _summary_filter_text(row, key, language).strip().lower()
+            if key == "taluk":
+                if text != query:
+                    matched = False
+                    break
+            elif query not in text:
+                matched = False
+                break
+        if matched:
+            out.append(row)
+    reverse = sort_dir == "desc"
+    if sort == "acno":
+        out.sort(key=lambda r: r.acno, reverse=reverse)
+    elif sort == "balance":
+        out.sort(key=lambda r: r.balance, reverse=reverse)
+    elif sort == "share_type":
+        out.sort(key=lambda r: (r.share_type_code, (r.share_type_label or "").lower()), reverse=reverse)
+    elif sort:
+        out.sort(key=lambda r: _summary_filter_text(r, sort, language).lower(), reverse=reverse)
+    else:
+        out.sort(key=lambda r: r.acno)
+    return out
+
+
+async def _build_share_summary(
+    session: AsyncSession,
+    as_on: str | None,
+    balance: str,
+) -> tuple:
     from datetime import date as date_cls
 
     as_on_d = date_cls.fromisoformat(as_on) if as_on else date_cls.today()
     members = {m.acno: m for m in (await session.execute(select(Member))).scalars().all()}
-    bals = await balances_by_acno(session, None, as_on_d)
+    type_rows = list((await session.execute(select(ShareType))).scalars().all())
+    types = {t.code: t for t in type_rows}
+    legacy_to_code = {int(t.legacy_code): t.code for t in type_rows if t.legacy_code is not None}
+    prefix_to_code = {(t.prefix or "").strip().upper(): t.code for t in type_rows if (t.prefix or "").strip()}
+    bals = await balances_by_acno_share_type(
+        session,
+        as_on_d,
+        legacy_to_code=legacy_to_code,
+        prefix_to_code=prefix_to_code,
+        known_codes=set(types),
+    )
     items: list[SummaryRow] = []
-    for acno, (add, delete, bal, shares) in bals.items():
+    for (acno, code), (_add, _delete, bal, shares) in bals.items():
         if balance == "positive" and bal <= 0:
             continue
         if balance == "zero" and bal != 0:
@@ -399,6 +535,9 @@ async def share_summary(
         m = members.get(acno)
         if not m:
             continue
+        st = types.get(code)
+        prefix = (st.prefix or "").strip() if st else ""
+        type_name = (st.name or "").strip() if st else ""
         items.append(
             SummaryRow(
                 acno=acno,
@@ -406,11 +545,73 @@ async def share_summary(
                 name_kn=compose_name_kn(m),
                 balance=bal,
                 share_nos=", ".join(shares),
+                share_no=(m.share_no or m.shac or "").strip(),
+                village_en=(m.village_en or "").strip(),
+                village_kn=(m.village_kn or "").strip(),
+                post_en=(m.post_en or "").strip(),
+                post_kn=(m.post_kn or "").strip(),
+                taluk_en=(m.taluk_en or "").strip(),
+                taluk_kn=(m.taluk_kn or "").strip(),
+                district_en=(m.dist_en or "").strip(),
+                district_kn=(m.dist_kn or "").strip(),
+                category=(m.category or "").strip(),
+                sex=(m.sex or "").strip(),
+                mobile=(m.mobile or "").strip(),
+                phone=(m.phone or "").strip(),
+                share_type_code=code,
+                share_type_name=type_name,
+                share_type_prefix=prefix,
+                share_type_label=_share_type_label(code, prefix, type_name),
             )
         )
+    society = await get_setting(session, "society_name", "Kramcop")
+    return as_on_d, society, items
+
+
+def _summary_text_filters(
+    f_acno: str,
+    f_name: str,
+    f_share_no: str,
+    f_village: str,
+    f_post: str,
+    f_taluk: str,
+    f_district: str,
+    f_category: str,
+    f_sex: str,
+    f_mobile: str,
+    f_phone: str,
+    f_share_type: str,
+    f_balance: str,
+) -> dict[str, str]:
+    return {
+        "acno": f_acno,
+        "name": f_name,
+        "share_no": f_share_no,
+        "village": f_village,
+        "post": f_post,
+        "taluk": f_taluk,
+        "district": f_district,
+        "category": f_category,
+        "sex": f_sex,
+        "mobile": f_mobile,
+        "phone": f_phone,
+        "share_type": f_share_type,
+        "balance": f_balance,
+    }
+
+
+@router.get("/reports/share-summary", response_model=SummaryList)
+async def share_summary(
+    as_on: str | None = None,
+    balance: str = "positive",
+    language: str = "kn",
+    session: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    as_on_d, society, items = await _build_share_summary(session, as_on, balance)
     items.sort(key=lambda r: r.acno)
     return SummaryList(
-        society_name=await get_setting(session, "society_name", "Kramcop"),
+        society_name=society,
         as_on=as_on_d,
         language=language,
         items=items,
@@ -424,18 +625,57 @@ async def share_summary_export(
     balance: str = "positive",
     language: str = "kn",
     fmt: str = "xlsx",
+    share_type: int | None = None,
+    sort: str = "acno",
+    sort_dir: str = "asc",
+    f_acno: str = "",
+    f_name: str = "",
+    f_share_no: str = "",
+    f_village: str = "",
+    f_post: str = "",
+    f_taluk: str = "",
+    f_district: str = "",
+    f_category: str = "",
+    f_sex: str = "",
+    f_mobile: str = "",
+    f_phone: str = "",
+    f_share_type: str = "",
+    f_balance: str = "",
+    columns: str = "",
+    header1: str = "",
+    header2: str = "",
+    member_acno: int | None = None,
     session: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    data = await share_summary(as_on=as_on, balance=balance, language=language, session=session, _user=_user)
-    headers = ["ACNO", "Name", "Balance", "Share nos"]
-    rows = [
-        [r.acno, r.name_kn if language == "kn" else r.name_en, r.balance, r.share_nos] for r in data.items
-    ]
+    as_on_d, society, items = await _build_share_summary(session, as_on, balance)
+    items = _apply_summary_view(
+        items,
+        language=language,
+        share_type=share_type,
+        text_filters=_summary_text_filters(
+            f_acno, f_name, f_share_no, f_village, f_post, f_taluk, f_district,
+            f_category, f_sex, f_mobile, f_phone, f_share_type, f_balance,
+        ),
+        sort=sort,
+        sort_dir=sort_dir,
+    )
+    if member_acno is not None:
+        items = [row for row in items if row.acno == member_acno]
+    data = SummaryList(society_name=society, as_on=as_on_d, language=language, items=items, total=len(items))
+    export_columns = _summary_export_columns(columns)
+    headers = [label for _key, label in export_columns]
+    rows = [[_summary_export_value(r, key, language) for key, _label in export_columns] for r in data.items]
+    title = header1.strip() or data.society_name
+    subtitle = header2.strip() or f"As on {data.as_on.strftime('%d/%m/%Y')}"
     if fmt == "csv":
-        lines = [",".join(headers)]
+        def _csv_cell(value: object) -> str:
+            text = "" if value is None else str(value)
+            return '"' + text.replace('"', '""') + '"'
+
+        lines = [_csv_cell(title), _csv_cell(subtitle), ",".join(_csv_cell(label) for label in headers)]
         for row in rows:
-            lines.append(",".join(f'"{c}"' if isinstance(c, str) else str(c) for c in row))
+            lines.append(",".join(_csv_cell(c) for c in row))
         content = ("\ufeff" + "\n".join(lines)).encode("utf-8")
         return StreamingResponse(
             BytesIO(content),
@@ -445,8 +685,8 @@ async def share_summary_export(
     wb = Workbook()
     ws = wb.active
     ws.title = "Share summary"
-    ws.append([data.society_name])
-    ws.append([f"As on {data.as_on}"])
+    ws.append([title])
+    ws.append([subtitle])
     ws.append([])
     ws.append(headers)
     for row in rows:

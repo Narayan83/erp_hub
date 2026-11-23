@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { formatDateTime } from '../lib/dates'
 
 type Row = { id: string; username: string; action: string; entity: string; entity_id: string; detail: string; created_at: string }
 type Res = { items: Row[]; total: number; page: number }
@@ -35,7 +36,7 @@ export function AuditPage() {
           <tbody>
             {(data?.items ?? []).map((r) => (
               <tr key={r.id}>
-                <td>{r.created_at ? r.created_at.replace('T', ' ').slice(0, 19) : ''}</td>
+                <td>{formatDateTime(r.created_at)}</td>
                 <td>{r.username}</td>
                 <td>{r.action}</td>
                 <td>{r.entity}</td>

@@ -12,7 +12,7 @@ export function PharmacyCodeMasterPage({ title, masterType }: Props) {
       labelKey="name"
       defaults={{ code: '', name: '', master_type: masterType, sort_order: 0 }}
       fields={[
-        { key: 'code', label: 'Code', required: true },
+        { key: 'code', label: 'Code', placeholder: 'Auto', readOnlyOnModify: true },
         { key: 'name', label: 'Name', required: true },
         { key: 'sort_order', label: 'Sort Order', type: 'number' },
       ]}
@@ -22,7 +22,7 @@ export function PharmacyCodeMasterPage({ title, masterType }: Props) {
         { key: 'sort_order', label: 'Sort' },
       ]}
       mapCreate={(form) => ({
-        code: form.code || null,
+        code: String(form.code ?? '').trim() || null,
         name: form.name,
         master_type: masterType,
         sort_order: Number(form.sort_order) || 0,

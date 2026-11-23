@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from erp_core.product_config import enabled_modules
 from modules.generp.ge.api.deps import get_current_user, get_session
 from modules.generp.ge.models.auth import Menu, User
 from modules.generp.ge.models.dashboard import DashboardShortcut
@@ -210,7 +211,7 @@ async def available_menus(
     rows = (
         await session.execute(
             select(Menu)
-            .where(Menu.is_active.is_(True))
+            .where(Menu.is_active.is_(True), Menu.module.in_(enabled_modules()))
             .order_by(Menu.sort_order, Menu.label)
         )
     ).scalars().all()

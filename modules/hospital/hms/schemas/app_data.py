@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from modules.hospital.hms.schemas.authority import AuthorityRead
 from modules.hospital.hms.schemas.billing_package import BillingPackageRead
 from modules.hospital.hms.schemas.billing_type import BillingTypeRead
-from modules.hospital.hms.schemas.service_category import ServiceCategoryRead
+from modules.hospital.hms.schemas.service_group import ServiceGroupRead
 from modules.hospital.hms.schemas.service_sub_category import ServiceSubCategoryRead
 from modules.hospital.hms.schemas.department import DepartmentRead
 from modules.hospital.hms.schemas.hospital_section import HospitalSectionRead
@@ -37,7 +37,7 @@ class AppDataResponse(BaseModel):
     roles: list[RoleRead]
     patient_no_formats: list[PatientNoFormatRead]
     patient_services: list[PatientServiceMasterRead]
-    service_categories: list[ServiceCategoryRead]
+    service_groups: list[ServiceGroupRead]
     service_sub_categories: list[ServiceSubCategoryRead]
     billing_packages: list[BillingPackageRead]
     hospital_profile: HospitalProfileRead

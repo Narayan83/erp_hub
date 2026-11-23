@@ -210,6 +210,7 @@ export function BillTemplateDesignerPage() {
   const bump = useCallback(() => setRev((r) => r + 1), [])
 
   const [documents, setDocuments] = useState<CatalogDocument[]>([])
+  const [bandTabs, setBandTabs] = useState(BANDS)
   const [code, setCode] = useState('')
   const [format, setFormat] = useState('A4')
   const [band, setBand] = useState<BandId>('header')
@@ -455,9 +456,10 @@ export function BillTemplateDesignerPage() {
 
   const loadSizeControls = (fmt: string) => {
     const [name, w, h] = pageDims(fmt)
+    const wide = !isCustom(fmt) && (layoutRef.current ? orientationOf(fmt) : 'portrait') === 'landscape'
     setPageName(name)
-    setPageW(String(w))
-    setPageH(String(h))
+    setPageW(String(wide ? h : w))
+    setPageH(String(wide ? w : h))
   }
 
   const pageOptions = (): { code: string; label: string }[] => {
@@ -517,11 +519,17 @@ export function BillTemplateDesignerPage() {
     [],
   )
 
-  const loadCatalog = useCallback(async () => {
+  const loadCatalog = useCallback(async (opts?: { replaceShared?: boolean }) => {
     const catalog = await api.get<Catalog>('/print-configs/layouts/catalog')
-    sharedRef.current = { ...(catalog.shared_pages || {}), ...sharedRef.current }
+    sharedRef.current = opts?.replaceShared
+      ? { ...(catalog.shared_pages || {}) }
+      : { ...(catalog.shared_pages || {}), ...sharedRef.current }
     documentsRef.current = catalog.documents || []
     setDocuments(catalog.documents || [])
+    if (catalog.bands?.length) {
+      const labelById = new Map(catalog.bands.map((b) => [b.id, b.label]))
+      setBandTabs(BANDS.map((b) => ({ ...b, label: labelById.get(b.id) || b.label })))
+    }
     return catalog
   }, [])
 
@@ -529,7 +537,7 @@ export function BillTemplateDesignerPage() {
     let cancelled = false
     void (async () => {
       try {
-        const catalog = await loadCatalog()
+        const catalog = await loadCatalog({ replaceShared: true })
         if (cancelled) return
         const wanted = (search.get('code') || '').toUpperCase()
         const docs = catalog.documents || []
@@ -574,6 +582,7 @@ export function BillTemplateDesignerPage() {
     if (!layoutRef.current) return
     remember()
     metaOf(format).orientation = value === 'landscape' ? 'landscape' : 'portrait'
+    loadSizeControls(format)
     const bands = bandsOf(format)
     const [w] = paperOf(format)
     const [ml, , mr] = readMargins(format)
@@ -612,15 +621,15 @@ export function BillTemplateDesignerPage() {
     setSel(null)
     touch()
     syncCanvas(c)
+    return c
   }
 
   /** Stretch field boxes and lines so the design keeps its proportions on the new size. */
   const rescalePage = (c: string, sxIn: number, syIn: number) => {
     const L = layoutRef.current!
     const meta = (L.page?.[c] || {}) as PageMeta
-    let sx = sxIn
-    let sy = syIn
-    if ((meta.orientation || 'portrait') === 'landscape') [sx, sy] = [sy, sx]
+    const sx = sxIn
+    const sy = syIn
     const scaleY = meta.y_origin === 'page'
     const bands = bandsOf(c)
     for (const b of BAND_IDS) {
@@ -641,21 +650,15 @@ export function BillTemplateDesignerPage() {
     }
   }
 
-  const updatePage = () => {
+  const updatePage = (): string => {
     const L = layoutRef.current
-    if (!L) return
+    if (!L) return format
     const w = clamp(Number(pageW) || 148, 40, 1000)
     const h = clamp(Number(pageH) || 210, 40, 1000)
+    const [curW, curH] = paperOf(format)
+    if (Math.abs(curW - w) < 0.1 && Math.abs(curH - h) < 0.1) return format
     if (!isCustom(format)) {
-      const label = pageOptions().find((o) => o.code === format)?.label || format
-      if (
-        !window.confirm(
-          `${label} is a standard size and cannot be changed.\nCreate a custom page of ${w} × ${h} mm from this design instead?`,
-        )
-      )
-        return
-      addPage(pageName.trim() || `${label} custom`)
-      return
+      return addPage(pageName.trim() || `${format} ${w} x ${h}`) || format
     }
     remember()
     adoptSharedPage(format, false)
@@ -671,6 +674,7 @@ export function BillTemplateDesignerPage() {
     publishPages()
     loadSizeControls(format)
     syncCanvas(format)
+    return format
   }
 
   const removePage = () => {
@@ -1033,20 +1037,23 @@ export function BillTemplateDesignerPage() {
     if (!L || !code) return
     setBusy(true)
     try {
-      L.active_format = format
+      const active = updatePage()
+      L.active_format = active
       publishPages()
       const saved = await api.put<LayoutPayload>(`/print-configs/layouts/by-code/${encodeURIComponent(code)}`, {
         layout: L,
-        paper_size: format,
-        orientation: orientationOf(format),
+        paper_size: active,
+        orientation: orientationOf(active),
       })
       const next = saved.layout
       next.formats = next.formats || {}
       next.page = next.page || {}
       next.custom_pages = next.custom_pages || {}
       layoutRef.current = next
-      let msg = `Template saved (${saved.paper_size || format}). New prints use this page size and layout.`
-      if (isCustom(format)) {
+      setFormat(active)
+      loadSizeControls(active)
+      let msg = `Template saved (${saved.paper_size || active}). New prints use this page size and layout.`
+      if (isCustom(active)) {
         try {
           const verify = await api.get<{ paper_size?: string; custom_width_mm?: number; custom_height_mm?: number; layout_options?: { designed?: boolean } }>(
             `/print-configs/by-code/${encodeURIComponent(code)}`,
@@ -1070,7 +1077,7 @@ export function BillTemplateDesignerPage() {
         }
       }
       setDirty(false)
-      syncCanvas(format)
+      syncCanvas(active)
       setNotice({ kind: 'ok', text: msg })
     } catch (e) {
       fail(e)
@@ -1084,9 +1091,11 @@ export function BillTemplateDesignerPage() {
     if (!L || !code) return
     setBusy(true)
     try {
+      const active = updatePage()
+      L.active_format = active
       const res = await api.post<{ html: string }>('/print-configs/layouts/preview', {
         code,
-        bill_format: format,
+        bill_format: active,
         layout: L,
       })
       setPreviewHtml(res.html)
@@ -1124,7 +1133,13 @@ export function BillTemplateDesignerPage() {
   /* ───────── render ───────── */
 
   const orientation = layout ? orientationOf(format) : 'portrait'
-  const [paperWmm, paperHmm] = layout ? paperOf(format) : [210, 297]
+  const [stockW, stockH] = layout ? paperOf(format) : [210, 297]
+  const typedW = Number(pageW)
+  const typedH = Number(pageH)
+  const typedSize =
+    typedW >= 40 && typedH >= 40 && (Math.abs(typedW - stockW) >= 0.1 || Math.abs(typedH - stockH) >= 0.1)
+  const paperWmm = typedSize ? typedW : stockW
+  const paperHmm = typedSize ? typedH : stockH
   const margins = layout ? readMargins(format) : ([5, 5, 5, 5] as [number, number, number, number])
   const bandsNow = layout ? bandsOf(format) : null
   const free = layout ? isFree(format) : false
@@ -1435,7 +1450,7 @@ export function BillTemplateDesignerPage() {
       <div className="bd-body">
         <div className="bd-left">
           <div className="bd-tabs" role="tablist">
-            {BANDS.map((b) => (
+            {bandTabs.map((b) => (
               <button
                 key={b.id}
                 type="button"

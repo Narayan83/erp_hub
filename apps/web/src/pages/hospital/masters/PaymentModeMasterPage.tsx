@@ -9,7 +9,7 @@ export function PaymentModeMasterPage() {
       labelKey="name"
       defaults={{ code: '', name: '', sort_order: 0, is_cash: true }}
       fields={[
-        { key: 'code', label: 'Code', required: true },
+        { key: 'code', label: 'Code', placeholder: 'Auto', readOnlyOnModify: true },
         { key: 'name', label: 'Name', required: true },
         { key: 'sort_order', label: 'Sort Order', type: 'number' },
         { key: 'is_cash', label: 'Is Cash', type: 'checkbox' },
@@ -21,7 +21,7 @@ export function PaymentModeMasterPage() {
         { key: 'sort_order', label: 'Sort' },
       ]}
       mapCreate={(form) => ({
-        code: form.code || null,
+        code: String(form.code ?? '').trim() || null,
         name: form.name,
         sort_order: Number(form.sort_order) || 0,
         is_cash: Boolean(form.is_cash),

@@ -14,6 +14,7 @@ from modules.hospital.hms.schemas.single_service_opd import (
     SingleServiceOpdOptionRead,
     SingleServiceOpdOptionReorder,
     SingleServiceOpdOptionUpdate,
+    SingleServiceOpdUnlinkedMenuRead,
 )
 from modules.hospital.hms.services.single_service_opd import SingleServiceOpdService
 
@@ -26,6 +27,14 @@ async def list_options(
     session: AsyncSession = Depends(get_session),
 ):
     return await SingleServiceOpdService(session).list_options()
+
+
+@router.get("/options/unlinked-menus", response_model=list[SingleServiceOpdUnlinkedMenuRead])
+async def list_unlinked_menus(
+    _: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    return await SingleServiceOpdService(session).list_unlinked_menus()
 
 
 @router.get("/options/by-menu/{menu_code}", response_model=SingleServiceOpdOptionRead)

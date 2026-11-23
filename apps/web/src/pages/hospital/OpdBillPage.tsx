@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 import { listAll } from './billing/paged'
+import { HospitalPrintPreview, opdBillPrintJob, type HospitalPrintJob } from './billing/HospitalPrintPreview'
 import { openHospitalReport } from './billing/report'
 import { ResizableScrollTable } from './billing/ResizableScrollTable'
 import { ServiceSearchField } from './billing/ServiceSearchField'
@@ -45,6 +46,7 @@ export function OpdBillPage({ mode = 'create', initialBillId }: Props) {
 
   const [billId, setBillId] = useState<string | null>(initialBillId || null)
   const [billNo, setBillNo] = useState('')
+  const [printJob, setPrintJob] = useState<HospitalPrintJob | null>(null)
   const [tokenNo, setTokenNo] = useState('')
   const [billDate, setBillDate] = useState(todayIso())
   const [visitCategory, setVisitCategory] = useState('opd')
@@ -77,7 +79,7 @@ export function OpdBillPage({ mode = 'create', initialBillId }: Props) {
         api.get<Department[]>('/hospital/departments'),
         api.get<CatalogService[]>('/hospital/opd-bills/catalog/services'),
         api.get<PayMode[]>('/hospital/payment-modes').catch(() => api.get<PayMode[]>('/accounts/payment-modes')),
-        api.get<Array<{ id: string; name: string }>>('/hospital/service-categories'),
+        api.get<Array<{ id: string; name: string }>>('/hospital/service-groups'),
         api.get<Array<{ id: string; name: string }>>('/hospital/billing-packages').catch(() => []),
       ])
       setDoctors(docs)
@@ -104,13 +106,13 @@ export function OpdBillPage({ mode = 'create', initialBillId }: Props) {
     const q = catalogSearch.trim().toLowerCase()
     setCatalogRows(
       catalogAll
-        .filter((s) => !categoryId || s.category_id === categoryId)
+        .filter((s) => !categoryId || s.group_id === categoryId)
         .filter(
           (s) =>
             !q ||
             s.name.toLowerCase().includes(q) ||
             s.code.toLowerCase().includes(q) ||
-            (s.category_name || '').toLowerCase().includes(q),
+            (s.group_name || '').toLowerCase().includes(q),
         )
         .map((s) => ({ ...s, qty: 1, checked: false, rate: money(s.rate) })),
     )
@@ -218,7 +220,7 @@ export function OpdBillPage({ mode = 'create', initialBillId }: Props) {
           service_id: row.id,
           service_code: row.code,
           service_name: row.name,
-          category_name: row.category_name,
+          category_name: row.group_name,
           quantity: row.qty || 1,
           rate: money(row.rate),
         })
@@ -381,11 +383,7 @@ export function OpdBillPage({ mode = 'create', initialBillId }: Props) {
       setBillNo(saved.bill_no)
       setTokenNo(saved.token_number != null ? String(saved.token_number) : '')
       setStatus(`Saved ${saved.bill_no}`)
-      try {
-        await openHospitalReport(`/hospital/reports/opd-bill/${saved.id}/html`)
-      } catch {
-        /* optional */
-      }
+      setPrintJob(opdBillPrintJob(saved.id, saved.bill_no))
       if (!modify) {
         localStorage.removeItem(HOLD_KEY)
         clearForm()
@@ -629,11 +627,11 @@ export function OpdBillPage({ mode = 'create', initialBillId }: Props) {
             <select
               className="hms-field"
               style={{ maxWidth: 160 }}
-              aria-label="Category"
+              aria-label="Service Group"
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
             >
-              <option value="">All Categories</option>
+              <option value="">All Service Groups</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -654,7 +652,7 @@ export function OpdBillPage({ mode = 'create', initialBillId }: Props) {
                   <th style={{ width: 50 }}>Qty</th>
                   <th style={{ width: 80 }}>Rate</th>
                   <th style={{ width: 70 }}>Code</th>
-                  <th style={{ width: 90 }}>Category</th>
+                  <th style={{ width: 110 }}>Service Group</th>
                 </tr>
               </thead>
               <tbody>
@@ -688,7 +686,7 @@ export function OpdBillPage({ mode = 'create', initialBillId }: Props) {
                     </td>
                     <td>{money(r.rate).toFixed(2)}</td>
                     <td>{r.code}</td>
-                    <td>{r.category_name}</td>
+                    <td>{r.group_name}</td>
                   </tr>
                 ))}
               </tbody>
@@ -714,7 +712,7 @@ export function OpdBillPage({ mode = 'create', initialBillId }: Props) {
                   <th style={{ width: 80 }}>Rate</th>
                   <th style={{ width: 90 }}>Amount</th>
                   <th style={{ width: 70 }}>Code</th>
-                  <th style={{ width: 90 }}>Category</th>
+                  <th style={{ width: 110 }}>Service Group</th>
                 </tr>
               </thead>
               <tbody>
@@ -769,7 +767,7 @@ export function OpdBillPage({ mode = 'create', initialBillId }: Props) {
               className="hms-btn"
               type="button"
               disabled={!billId}
-              onClick={() => billId && void openHospitalReport(`/hospital/reports/opd-bill/${billId}/html`)}
+              onClick={() => billId && setPrintJob(opdBillPrintJob(billId, billNo))}
             >
               Print Bill
             </button>
@@ -795,6 +793,7 @@ export function OpdBillPage({ mode = 'create', initialBillId }: Props) {
         </section>
       </div>
       <input className="hms-status" readOnly value={status} />
+      {printJob ? <HospitalPrintPreview job={printJob} onClose={() => setPrintJob(null)} /> : null}
     </div>
   )
 }

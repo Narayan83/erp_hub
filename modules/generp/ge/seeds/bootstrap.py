@@ -377,9 +377,16 @@ async def _deactivate_duplicate_gst(session: AsyncSession) -> None:
 
 
 async def _seed_print_configs(session: AsyncSession) -> None:
+    from erp_core.product_config import get_product_name
     from modules.generp.ge.reports.print_layouts import default_document_layout
 
-    existing = {x.code: x for x in (await session.execute(select(PrintConfig))).scalars().all()}
+    product = get_product_name()
+    existing = {
+        x.code: x
+        for x in (
+            await session.execute(select(PrintConfig).where(PrintConfig.product == product))
+        ).scalars().all()
+    }
     default_barcode_layout = default_document_layout("BARCODE_LABEL")
     for i, (code, name) in enumerate(PRINT_CONFIGS, start=1):
         if code in existing:
@@ -399,6 +406,7 @@ async def _seed_print_configs(session: AsyncSession) -> None:
         )
         session.add(
             PrintConfig(
+                product=product,
                 code=code,
                 name=name,
                 sort_order=i,

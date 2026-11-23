@@ -14,7 +14,7 @@ from modules.hospital.hms.models.payment_mode import PaymentMode
 from modules.hospital.hms.models.patient_no_format import PatientNoFormat
 from modules.hospital.hms.models.prefix import Prefix
 from modules.hospital.hms.models.procedure_type import ProcedureType
-from modules.hospital.hms.models.service_category import ServiceCategory
+from modules.hospital.hms.models.service_group import ServiceGroup
 from modules.hospital.hms.models.service_sub_category import ServiceSubCategory
 from modules.hospital.hms.models.role import Role
 from modules.hospital.hms.models.role_menu_permission import RoleMenuPermission
@@ -171,7 +171,7 @@ async def seed_initial_data(session: AsyncSession) -> None:
     await _seed_patient_no_formats(session)
     await _seed_payment_modes(session)
     await _seed_procedure_types(session)
-    await _seed_service_categories(session)
+    await _seed_service_groups(session)
     await _seed_service_sub_categories(session)
     await _seed_billing_structure(session)
     menu_map = await _seed_menus(session)
@@ -193,15 +193,19 @@ async def seed_hospital_domain(session: AsyncSession) -> None:
     await _seed_patient_no_formats(session)
     await _seed_payment_modes(session)
     await _seed_procedure_types(session)
-    await _seed_service_categories(session)
+    await _seed_service_groups(session)
     await _seed_service_sub_categories(session)
     await _seed_billing_structure(session)
     await _seed_default_opd_service(session)
+    # Repair Billing entries for options saved before their menu rows existed.
+    from modules.hospital.hms.services.single_service_opd import SingleServiceOpdService
+
+    await SingleServiceOpdService(session).ensure_option_menus()
 
 
 async def _seed_default_opd_service(session: AsyncSession) -> None:
     from modules.hospital.hms.models.patient_service_master import PatientServiceMaster
-    from modules.hospital.hms.models.service_category import ServiceCategory
+    from modules.hospital.hms.models.service_group import ServiceGroup
     from modules.hospital.hms.models.service_sub_category import ServiceSubCategory
 
     existing = (
@@ -212,7 +216,7 @@ async def _seed_default_opd_service(session: AsyncSession) -> None:
     if existing:
         return
     cat = (
-        await session.execute(select(ServiceCategory).where(ServiceCategory.code == "GEN"))
+        await session.execute(select(ServiceGroup).where(ServiceGroup.code == "GEN"))
     ).scalar_one_or_none()
     sub = (
         await session.execute(
@@ -225,7 +229,7 @@ async def _seed_default_opd_service(session: AsyncSession) -> None:
             name="Consultation",
             service_charge=300,
             rate=300,
-            category_id=cat.id if cat else None,
+            group_id=cat.id if cat else None,
             sub_category_id=sub.id if sub else None,
             is_service_active=True,
             is_active=True,
@@ -384,16 +388,16 @@ async def _seed_procedure_types(session: AsyncSession) -> None:
             item.is_active = True
 
 
-async def _seed_service_categories(session: AsyncSession) -> None:
+async def _seed_service_groups(session: AsyncSession) -> None:
     existing = {
         item.code: item
-        for item in (await session.execute(select(ServiceCategory))).scalars().all()
+        for item in (await session.execute(select(ServiceGroup))).scalars().all()
     }
     for code, name, sort_order in SERVICE_CATEGORIES:
         item = existing.get(code)
         if not item:
             session.add(
-                ServiceCategory(code=code, name=name, sort_order=sort_order, is_active=True)
+                ServiceGroup(code=code, name=name, sort_order=sort_order, is_active=True)
             )
         elif item.name != name or item.sort_order != sort_order or not item.is_active:
             item.name = name
@@ -404,7 +408,7 @@ async def _seed_service_categories(session: AsyncSession) -> None:
 async def _seed_service_sub_categories(session: AsyncSession) -> None:
     cat_map = {
         item.code: item
-        for item in (await session.execute(select(ServiceCategory))).scalars().all()
+        for item in (await session.execute(select(ServiceGroup))).scalars().all()
     }
     existing = {
         (item.category_id, item.code): item
@@ -477,6 +481,11 @@ async def _seed_payment_modes(session: AsyncSession) -> None:
         item.code: item
         for item in (await session.execute(select(PaymentMode))).scalars().all()
     }
+    standard = {code for code, *_rest in PAYMENT_MODES}
+    # Keep a hospital's own payment-mode codes. Defaults are only for an empty list
+    # or a list that already uses these codes.
+    if any(code not in standard for code in existing):
+        return
     for code, name, is_cash, sort_order in PAYMENT_MODES:
         item = existing.get(code)
         if not item:
@@ -649,8 +658,11 @@ async def _seed_menus(session: AsyncSession) -> dict[str, str]:
         # sso_* / sbt_* come from Single Service OPD / Short Bill setup.
         # MENUCRT marks rows created via Menu Creation (except the admin screen itself).
         if menu.code.startswith(("sso_", "sbt_")):
+            menu.module = "hospital"
             continue
         if menu.legacy_form == "MENUCRT" and menu.code not in defined_codes:
+            if menu.module == "core":
+                menu.module = "hospital"
             continue
         if menu.code not in defined_codes and menu.is_active:
             menu.is_active = False

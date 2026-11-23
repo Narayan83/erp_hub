@@ -10,14 +10,13 @@ type Service = {
   code: string
   name: string
   rate: number | string
-  category_id?: string | null
-  category_name?: string | null
+  group_id?: string | null
+  group_name?: string | null
   sub_category_name?: string | null
 }
 
 /**
- * Assign Services To Group. Groups are Service Categories; assignment sets
- * `category_id` on the patient service (PATCH /hospital/patient-services/{id}).
+ * Assign Services To Group. Assignment sets `group_id` on the patient service.
  */
 export function AssignServicesGroupPage() {
   const [groups, setGroups] = useState<Group[]>([])
@@ -36,7 +35,7 @@ export function AssignServicesGroupPage() {
   useEffect(() => {
     void (async () => {
       try {
-        setGroups(unwrapList<Group>(await api.get<unknown>('/hospital/service-categories')))
+        setGroups(unwrapList<Group>(await api.get<unknown>('/hospital/service-groups')))
         await loadServices()
       } catch (e) {
         setError(errMsg(e))
@@ -44,12 +43,12 @@ export function AssignServicesGroupPage() {
     })()
   }, [])
 
-  const inGroup = useMemo(() => services.filter((s) => s.category_id === groupId), [services, groupId])
+  const inGroup = useMemo(() => services.filter((s) => s.group_id === groupId), [services, groupId])
   const candidates = useMemo(() => {
     const q = filter.trim().toLowerCase()
     return services.filter(
       (s) =>
-        s.category_id !== groupId &&
+        s.group_id !== groupId &&
         (!q || s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)),
     )
   }, [services, groupId, filter])
@@ -70,7 +69,7 @@ export function AssignServicesGroupPage() {
     try {
       for (const id of ids) {
         await api.patch(`/hospital/patient-services/${id}`, {
-          category_id: target,
+          group_id: target,
           sub_category_id: null,
         })
       }
@@ -147,7 +146,7 @@ export function AssignServicesGroupPage() {
                     </td>
                     <td>{s.code}</td>
                     <td>{s.name}</td>
-                    <td>{s.category_name || '—'}</td>
+                    <td>{s.group_name || '—'}</td>
                   </tr>
                 ))}
               </tbody>

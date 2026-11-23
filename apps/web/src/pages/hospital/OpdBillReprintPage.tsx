@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { api } from '../../api/client'
 import { PatientLookup } from './billing/PatientLookup'
-import { openHospitalReport } from './billing/report'
+import { HospitalPrintPreview, opdBillPrintJob, type HospitalPrintJob } from './billing/HospitalPrintPreview'
 import { OpdBillDetail, OpdBillSummary, Patient, money } from './billing/types'
 
 export function OpdBillReprintPage() {
@@ -10,6 +10,7 @@ export function OpdBillReprintPage() {
   const [rows, setRows] = useState<OpdBillSummary[]>([])
   const [detail, setDetail] = useState<OpdBillDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [printJob, setPrintJob] = useState<HospitalPrintJob | null>(null)
 
   async function searchByPatient(p: Patient) {
     setPatient(p)
@@ -106,7 +107,7 @@ export function OpdBillReprintPage() {
             <button
               className="btn btn-sm btn-erp"
               type="button"
-              onClick={() => void openHospitalReport(`/hospital/reports/opd-bill/${detail.id}/html`)}
+              onClick={() => setPrintJob(opdBillPrintJob(detail.id, detail.bill_no))}
             >
               Print / Preview
             </button>
@@ -144,6 +145,7 @@ export function OpdBillReprintPage() {
           </table>
         </div>
       )}
+      {printJob ? <HospitalPrintPreview job={printJob} onClose={() => setPrintJob(null)} /> : null}
     </div>
   )
 }

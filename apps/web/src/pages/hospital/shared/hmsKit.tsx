@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useState } from 'react'
+import { ReactNode, useState } from 'react'
 import { api } from '../../../api/client'
 import '../billing/hms-master.css'
 import { errMsg, unwrapList } from './hmsShared'
@@ -108,6 +108,13 @@ export type FoundPatient = {
   mobile?: string | null
 }
 
+function patientName(p: FoundPatient): string {
+  return (
+    p.full_name ||
+    [p.first_name, p.middle_name, p.last_name].filter(Boolean).join(' ')
+  )
+}
+
 /** HMS-styled patient finder: exact patient_no first, then fuzzy search list. */
 export function PatientFind({
   onSelect,
@@ -123,8 +130,7 @@ export function PatientFind({
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  async function find(e?: FormEvent) {
-    e?.preventDefault()
+  async function find() {
     const term = q.trim()
     if (!term) return
     setBusy(true)
@@ -138,7 +144,7 @@ export function PatientFind({
           page_size: 5,
         }),
       )
-      const hit = exact.find((p) => p.patient_no.toLowerCase() === term.toLowerCase())
+      const hit = exact.find((p) => (p.patient_no || '').toLowerCase() === term.toLowerCase())
       if (hit) {
         onSelect(hit)
         return
@@ -158,7 +164,7 @@ export function PatientFind({
 
   return (
     <div>
-      <form className="hms-toolbar" onSubmit={find} style={{ marginBottom: 4 }}>
+      <div className="hms-toolbar" style={{ marginBottom: 4 }}>
         <label>{label}</label>
         <input
           className="hms-field"
@@ -166,16 +172,22 @@ export function PatientFind({
           placeholder="Patient no / name / mobile"
           value={q}
           onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return
+            e.preventDefault()
+            e.stopPropagation()
+            void find()
+          }}
         />
-        <button className="hms-btn" type="submit" disabled={busy}>
+        <button className="hms-btn" type="button" disabled={busy} onClick={() => void find()}>
           {busy ? '…' : 'Find'}
         </button>
         {selected && (
           <strong style={{ marginLeft: 8 }}>
-            {selected.patient_no} — {selected.full_name}
+            {selected.patient_no} — {patientName(selected)}
           </strong>
         )}
-      </form>
+      </div>
       {err && <div className="hms-error">{err}</div>}
       {hits.length > 0 && (
         <div className="hms-table-wrap" style={{ maxHeight: 160, marginBottom: 6 }}>
@@ -197,7 +209,7 @@ export function PatientFind({
                   }}
                 >
                   <td>{p.patient_no}</td>
-                  <td>{p.full_name}</td>
+                  <td>{patientName(p)}</td>
                   <td>{p.mobile || ''}</td>
                 </tr>
               ))}

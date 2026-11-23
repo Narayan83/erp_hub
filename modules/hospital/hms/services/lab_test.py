@@ -22,7 +22,7 @@ from modules.hospital.hms.models.pathology_normal_range import PathologyNormalRa
 from modules.hospital.hms.models.pathology_parameter import PathologyParameter, PathologyServiceParameter
 from modules.hospital.hms.models.pathology_service_member import PathologyServiceMember
 from modules.hospital.hms.models.patient_service_master import PatientServiceMaster
-from modules.hospital.hms.models.service_category import ServiceCategory
+from modules.hospital.hms.models.service_group import ServiceGroup
 from modules.hospital.hms.schemas.lab_test import (
     LabTestRead,
     LabTestSave,
@@ -66,7 +66,7 @@ class LabTestService:
     async def _lab_category_id(self) -> str:
         cat = (
             await self.session.execute(
-                select(ServiceCategory).where(ServiceCategory.code == self.LAB_CATEGORY_CODE)
+                select(ServiceGroup).where(ServiceGroup.code == self.LAB_CATEGORY_CODE)
             )
         ).scalar_one_or_none()
         if not cat:
@@ -152,7 +152,7 @@ class LabTestService:
         rows = (
             await self.session.execute(
                 select(PatientServiceMaster)
-                .where(PatientServiceMaster.category_id == cat_id)
+                .where(PatientServiceMaster.group_id == cat_id)
                 .where(PatientServiceMaster.is_active.is_(True))
                 .order_by(PatientServiceMaster.name)
             )
@@ -171,7 +171,7 @@ class LabTestService:
             (
                 await self.session.execute(
                     select(PatientServiceMaster)
-                    .where(PatientServiceMaster.category_id == cat_id)
+                    .where(PatientServiceMaster.group_id == cat_id)
                     .where(PatientServiceMaster.is_active.is_(True))
                     .order_by(PatientServiceMaster.name)
                 )
@@ -363,7 +363,7 @@ class LabTestService:
                 name=name,
                 rate=data.price,
                 service_charge=data.price,
-                category_id=cat_id,
+                group_id=cat_id,
                 sub_category_id=data.sub_category_id,
                 is_sharing=False,
                 discount_apply=False,
@@ -556,7 +556,7 @@ class LabTestService:
                 name=name,
                 rate=data.price,
                 service_charge=data.price,
-                category_id=cat_id,
+                group_id=cat_id,
                 sub_category_id=data.sub_category_id,
                 is_sharing=False,
                 discount_apply=False,

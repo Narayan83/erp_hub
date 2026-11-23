@@ -7,6 +7,7 @@ from erp_core.models.auth import (
     UserRoleMapping,
     UserType,
 )
+from erp_core.models.dashboard_shortcut import DashboardShortcut
 from erp_core.models.base import TimestampMixin
 from erp_core.models.masters import CompanyProfile, Ledger, Party, PaymentMode, PrintConfig
 from erp_core.models.cashbook import CashbookVoucher, CashbookVoucherLine
@@ -18,6 +19,7 @@ __all__ = [
     "Role",
     "UserRoleMapping",
     "Menu",
+    "DashboardShortcut",
     "RoleMenuPermission",
     "NotificationSetup",
     "CompanyProfile",

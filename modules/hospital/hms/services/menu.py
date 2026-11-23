@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from erp_core.product_config import get_product_name
 from modules.hospital.hms.models.menu import Menu
 from modules.hospital.hms.models.role import Role
 from modules.hospital.hms.models.role_menu_permission import RoleMenuPermission
@@ -55,6 +56,8 @@ class MenuService:
             existing.legacy_form = data.legacy_form or existing.legacy_form or "MENUCRT"
             existing.parameters = data.parameters
             existing.is_active = True
+            if existing.module != "core":
+                existing.module = get_product_name()
             await self.session.flush()
             await self._ensure_super_admin_permission(existing.id)
             await self.session.refresh(existing)
@@ -69,6 +72,7 @@ class MenuService:
             legacy_mcode=data.legacy_mcode,
             legacy_form=data.legacy_form or "MENUCRT",
             parameters=data.parameters,
+            module=get_product_name(),
             is_active=data.is_active,
         )
         self.session.add(menu)

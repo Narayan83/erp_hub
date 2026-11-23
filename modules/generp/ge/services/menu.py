@@ -2,6 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from erp_core.product_config import enabled_modules
 from modules.generp.ge.models.auth import Menu, RoleMenuPermission, UserRoleMapping
 from modules.generp.ge.models.masters import CompanyProfile
 from modules.generp.ge.schemas.menu import MenuPermissions, MenuTreeNode
@@ -16,7 +17,9 @@ class MenuService:
         self.session = session
 
     async def list_all_active(self) -> list[Menu]:
-        result = await self.session.execute(select(Menu).where(Menu.is_active.is_(True)))
+        result = await self.session.execute(
+            select(Menu).where(Menu.is_active.is_(True), Menu.module.in_(enabled_modules()))
+        )
         return list(result.scalars().all())
 
     async def package_codes(self) -> set[str] | None:

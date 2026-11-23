@@ -77,9 +77,17 @@ async def _bootstrap() -> None:
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(lambda sync_conn: create_schemas(sync_conn, schema_list))
+        if module_enabled("hospital"):
+            from modules.hospital.hms.schema_rename import rename_service_categories_to_groups
+
+            await rename_service_categories_to_groups(conn)
         await conn.run_sync(lambda sync_conn: migrate_public_tables_to_schemas(sync_conn, table_schemas))
         await conn.run_sync(Base.metadata.create_all)
         await ensure_added_columns(conn)
+        if module_enabled("hospital"):
+            from modules.hospital.hms.schema_columns import ensure_hospital_columns
+
+            await ensure_hospital_columns(conn)
 
     if settings.seed_on_startup:
         SessionLocal = get_session_factory()

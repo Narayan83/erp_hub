@@ -1,11 +1,12 @@
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, Numeric, String, text
+from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
 from erp_core.database import Base
 from erp_core.models.base import TimestampMixin
+from erp_core.product_config import get_product_name
 
 
 def _pk() -> Mapped[str]:
@@ -52,9 +53,15 @@ class CompanyProfile(Base, TimestampMixin):
 
 class PrintConfig(Base, TimestampMixin):
     __tablename__ = "print_configs"
+    __table_args__ = (
+        UniqueConstraint("product", "code", name="uq_print_configs_product_code"),
+    )
 
     id: Mapped[str] = _pk()
-    code: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    product: Mapped[str] = mapped_column(
+        String(40), nullable=False, default=get_product_name, index=True
+    )
+    code: Mapped[str] = mapped_column(String(80), index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     printer_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
     paper_size: Mapped[str] = mapped_column(String(20), nullable=False, default="A4")

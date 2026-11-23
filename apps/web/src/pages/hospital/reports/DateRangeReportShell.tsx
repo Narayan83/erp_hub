@@ -105,36 +105,10 @@ export async function loadAllDoctors(): Promise<DoctorOption[]> {
   return listAll<DoctorOption>('/hospital/doctors')
 }
 
-/** Fetch the HTML report with the bearer token and show it via blob URL in a new window. */
+/** Open the shared exact-size print preview for a hospital HTML report. */
 export async function printHtmlReport(path: string): Promise<void> {
-  // Open synchronously so the popup is not blocked after the async fetch.
-  const win = window.open('', '_blank')
-  try {
-    const token = localStorage.getItem(TOKEN_KEY)
-    const res = await fetch(`${API_BASE}${path.startsWith('/') ? path : `/${path}`}`, {
-      headers: {
-        Accept: 'text/html,application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    })
-    const text = await res.text()
-    if (!res.ok) {
-      let detail: unknown = text
-      try {
-        detail = JSON.parse(text)?.detail ?? text
-      } catch {
-        /* keep raw text */
-      }
-      throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
-    }
-    const blobUrl = URL.createObjectURL(new Blob([text], { type: 'text/html' }))
-    if (win) win.location.href = blobUrl
-    else window.open(blobUrl, '_blank')
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 120_000)
-  } catch (err) {
-    win?.close()
-    throw err
-  }
+  const { openHospitalReport } = await import('../billing/report')
+  await openHospitalReport(path)
 }
 
 /** Download a server-generated file (e.g. `.../excel?...`) with the bearer token. */

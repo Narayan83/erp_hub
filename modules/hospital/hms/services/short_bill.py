@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from erp_core.product_config import get_product_name
 from modules.hospital.hms.models.menu import Menu
 from modules.hospital.hms.models.role_menu_permission import RoleMenuPermission
 from modules.hospital.hms.models.short_bill import ShortBill, ShortBillType
@@ -193,6 +194,7 @@ class ShortBillService:
                 sort_order=40 + int(item.sort_order or 0),
                 legacy_form="SHRTBL",
                 parameters=item.default_service_id,
+                module=get_product_name(),
                 is_active=item.is_active,
             )
             self.session.add(menu)
@@ -205,6 +207,7 @@ class ShortBillService:
             menu.sort_order = 40 + int(item.sort_order or 0)
             menu.legacy_form = menu.legacy_form or "SHRTBL"
             menu.parameters = item.default_service_id
+            menu.module = get_product_name()
             menu.is_active = item.is_active
         await self.session.flush()
 

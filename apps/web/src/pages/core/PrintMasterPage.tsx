@@ -98,10 +98,19 @@ function payloadOf(d: Draft) {
   }
 }
 
+type CatalogDoc = {
+  code: string
+  name: string
+  kind?: string
+}
+
+type PrinterInfo = { name: string; is_default?: boolean }
+
 export function PrintMasterPage() {
   const navigate = useNavigate()
   const [rows, setRows] = useState<PrintConfig[]>([])
-  const [designable, setDesignable] = useState<Set<string>>(new Set())
+  const [catalogDocs, setCatalogDocs] = useState<CatalogDoc[]>([])
+  const [printers, setPrinters] = useState<PrinterInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -109,11 +118,24 @@ export function PrintMasterPage() {
   const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState('')
 
+  const designable = useMemo(() => new Set(catalogDocs.map((d) => d.code)), [catalogDocs])
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      setRows(await api.get<PrintConfig[]>('/print-configs'))
+      const [configs, catalog, printerData] = await Promise.all([
+        api.get<PrintConfig[]>('/print-configs'),
+        api
+          .get<{ documents?: CatalogDoc[] }>('/print-configs/layouts/catalog')
+          .catch(() => ({ documents: [] })),
+        api
+          .get<{ printers?: PrinterInfo[] }>('/print-configs/printers')
+          .catch(() => ({ printers: [] })),
+      ])
+      setRows(configs)
+      setCatalogDocs(catalog.documents || [])
+      setPrinters(printerData.printers || [])
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -123,11 +145,12 @@ export function PrintMasterPage() {
 
   useEffect(() => {
     void load()
-    api
-      .get<{ documents: { code: string }[] }>('/print-configs/layouts/catalog')
-      .then((c) => setDesignable(new Set((c.documents || []).map((d) => d.code))))
-      .catch(() => setDesignable(new Set()))
   }, [load])
+
+  const unconfiguredDocs = useMemo(() => {
+    const existingCodes = new Set(rows.map((r) => r.code.toUpperCase()))
+    return catalogDocs.filter((doc) => !existingCodes.has(doc.code.toUpperCase()))
+  }, [catalogDocs, rows])
 
   const openDesigner = (code?: string) =>
     navigate(`/print_template_designer${code ? `?code=${encodeURIComponent(code)}` : ''}`, {
@@ -223,8 +246,10 @@ export function PrintMasterPage() {
         </button>
       </div>
       <p className="text-secondary small mb-3">
-        Choose the printer, paper, orientation, margins and print mode for each document. Use{' '}
-        <strong>Design bill template</strong> to arrange fields, margins, lines and shapes on the page.
+        Choose the printer, paper, orientation, margins and print mode for each document. Printer choice
+        is saved on <strong>this PC only</strong> — other billing stations keep their own printer (or
+        Windows default if unset). Use <strong>Design bill template</strong> to arrange fields, margins,
+        lines and shapes on the page.
       </p>
 
       {error && (
@@ -263,7 +288,7 @@ export function PrintMasterPage() {
                   <code>{r.code}</code>
                 </td>
                 <td>{r.name}</td>
-                <td>{r.printer_name || '—'}</td>
+                <td>{r.printer_name || 'Windows default'}</td>
                 <td>
                   {r.paper_size === 'CUSTOM' && r.custom_width_mm && r.custom_height_mm
                     ? `Custom ${r.custom_width_mm} × ${r.custom_height_mm} mm`
@@ -323,12 +348,44 @@ export function PrintMasterPage() {
               <button type="button" className="btn-close" aria-label="Close" onClick={() => setEditing(null)} />
             </div>
             <div className="row g-2">
+              {!editing.id && unconfiguredDocs.length > 0 && (
+                <div className="col-12">
+                  <label className="form-label small mb-1">Menu / document (optional)</label>
+                  <select
+                    className="form-select form-select-sm"
+                    value={unconfiguredDocs.some((doc) => doc.code === d.code) ? d.code : ''}
+                    onChange={(e) => {
+                      const picked = unconfiguredDocs.find((doc) => doc.code === e.target.value)
+                      if (!picked) return
+                      setEditing((cur) =>
+                        cur
+                          ? {
+                              ...cur,
+                              draft: {
+                                ...cur.draft,
+                                code: picked.code,
+                                name: picked.name || picked.code,
+                              },
+                            }
+                          : cur,
+                      )
+                    }}
+                  >
+                    <option value="">Custom code…</option>
+                    {unconfiguredDocs.map((doc) => (
+                      <option key={doc.code} value={doc.code}>
+                        {doc.name} ({doc.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="col-md-4">
                 <label className="form-label small mb-1">Code</label>
                 <input
                   className="form-control form-control-sm"
                   value={d.code}
-                  maxLength={40}
+                  maxLength={80}
                   disabled={!!editing.id}
                   onChange={(e) => set('code', e.target.value.toUpperCase())}
                 />
@@ -343,14 +400,26 @@ export function PrintMasterPage() {
                 />
               </div>
               <div className="col-12">
-                <label className="form-label small mb-1">Printer name</label>
-                <input
-                  className="form-control form-control-sm"
+                <label className="form-label small mb-1">Printer</label>
+                <select
+                  className="form-select form-select-sm"
                   value={d.printer_name}
-                  maxLength={300}
-                  placeholder="Leave empty to use the default printer"
                   onChange={(e) => set('printer_name', e.target.value)}
-                />
+                >
+                  <option value="">Windows default printer</option>
+                  {d.printer_name && !printers.some((p) => p.name === d.printer_name) ? (
+                    <option value={d.printer_name}>{d.printer_name} (unavailable)</option>
+                  ) : null}
+                  {printers.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      {p.name}
+                      {p.is_default ? ' (Windows default)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <div className="form-text">
+                  Applies only on this computer. Leave as Windows default if this station has no dedicated printer.
+                </div>
               </div>
               <div className="col-6 col-md-3">
                 <label className="form-label small mb-1">Paper</label>

@@ -90,7 +90,7 @@ TABLE_CLASSIFICATION: dict[str, tuple[str, bool]] = {
     "patient_no_formats": ("Patient & Number Setup", False),
     "prefixes": ("Patient & Number Setup", False),
     # --- Service / billing masters ---------------------------------------
-    "service_categories": ("Service / Billing Masters", False),
+    "service_groups": ("Service / Billing Masters", False),
     "service_sub_categories": ("Service / Billing Masters", False),
     "patient_service_masters": ("Service / Billing Masters", False),
     "billing_packages": ("Service / Billing Masters", False),
@@ -177,8 +177,171 @@ async def _list_app_tables(session: AsyncSession) -> list[tuple[str, str]]:
     return [(row[0], row[1]) for row in result.fetchall()]
 
 
+def _ident(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
 def _qualified(schema: str, name: str) -> str:
-    return f'"{schema}"."{name}"'
+    return f"{_ident(schema)}.{_ident(name)}"
+
+
+# Schemas this screen can offer for reset. Other products share `core` masters
+# (ledgers, parties, payment modes) and their foreign keys block TRUNCATE even
+# when those other tables are empty.
+_APP_SCHEMAS = frozenset({"core", "hospital"})
+
+_FK_ACTION = {
+    "a": "NO ACTION",
+    "r": "RESTRICT",
+    "c": "CASCADE",
+    "n": "SET NULL",
+    "d": "SET DEFAULT",
+}
+
+
+def _split_columns(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return [str(part) for part in value if part]
+    return [part for part in str(value).split(",") if part]
+
+
+def _fk_action(code: object) -> str:
+    if isinstance(code, memoryview):
+        code = code.tobytes()
+    if isinstance(code, (bytes, bytearray)):
+        raw = bytes(code).decode()
+    else:
+        raw = "" if code is None else str(code)
+    raw = raw.strip()
+    return _FK_ACTION.get(raw[:1] or "a", "NO ACTION")
+
+
+def _fk_definition(fk: dict) -> str:
+    src_cols = ", ".join(_ident(column) for column in _split_columns(fk["src_columns"]))
+    tgt_cols = ", ".join(_ident(column) for column in _split_columns(fk["tgt_columns"]))
+    update = _fk_action(fk.get("update_action"))
+    delete = _fk_action(fk.get("delete_action"))
+    target = _qualified(fk["tgt_schema"], fk["tgt_table"])
+    return (
+        f"FOREIGN KEY ({src_cols}) REFERENCES {target} ({tgt_cols}) "
+        f"ON UPDATE {update} ON DELETE {delete}"
+    )
+
+
+def _kept_table_message(blockers: list[dict]) -> str:
+    lines: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for fk in blockers:
+        key = (str(fk["src_table"]), str(fk["tgt_table"]))
+        if key in seen:
+            continue
+        seen.add(key)
+        src = _label(str(fk["src_table"]))
+        tgt = _label(str(fk["tgt_table"]))
+        if fk["src_table"] in PROTECTED_TABLES:
+            lines.append(f"{src} is always kept, and it still points at {tgt}. Untick {tgt}.")
+        else:
+            lines.append(f"{src} still points at {tgt}. Tick {src} as well, or untick {tgt}.")
+    detail = "\n".join(f"- {line}" for line in lines)
+    return (
+        "Could not clear the selected tables because another table still depends on them.\n"
+        f"{detail}"
+    )
+
+
+async def _blocking_foreign_keys(
+    session: AsyncSession, clearing: set[tuple[str, str]]
+) -> list[dict]:
+    """Foreign keys from a table we are keeping into a table we are clearing."""
+    if not clearing:
+        return []
+    result = await session.execute(
+        text(
+            """
+            SELECT
+                src_ns.nspname AS src_schema,
+                src_rel.relname AS src_table,
+                tgt_ns.nspname AS tgt_schema,
+                tgt_rel.relname AS tgt_table,
+                con.conname AS conname,
+                con.confupdtype AS update_action,
+                con.confdeltype AS delete_action,
+                (
+                    SELECT string_agg(att.attname, ',' ORDER BY cols.ord)
+                    FROM unnest(con.conkey) WITH ORDINALITY AS cols(attnum, ord)
+                    JOIN pg_attribute att
+                      ON att.attrelid = con.conrelid AND att.attnum = cols.attnum
+                ) AS src_columns,
+                (
+                    SELECT string_agg(att.attname, ',' ORDER BY cols.ord)
+                    FROM unnest(con.confkey) WITH ORDINALITY AS cols(attnum, ord)
+                    JOIN pg_attribute att
+                      ON att.attrelid = con.confrelid AND att.attnum = cols.attnum
+                ) AS tgt_columns,
+                (
+                    SELECT bool_and(NOT att.attnotnull)
+                    FROM unnest(con.conkey) AS cols(attnum)
+                    JOIN pg_attribute att
+                      ON att.attrelid = con.conrelid AND att.attnum = cols.attnum
+                ) AS all_nullable
+            FROM pg_constraint con
+            JOIN pg_class src_rel ON src_rel.oid = con.conrelid
+            JOIN pg_namespace src_ns ON src_ns.oid = src_rel.relnamespace
+            JOIN pg_class tgt_rel ON tgt_rel.oid = con.confrelid
+            JOIN pg_namespace tgt_ns ON tgt_ns.oid = tgt_rel.relnamespace
+            WHERE con.contype = 'f'
+            """
+        )
+    )
+    found: list[dict] = []
+    for row in result.mappings():
+        src = (row["src_schema"], row["src_table"])
+        tgt = (row["tgt_schema"], row["tgt_table"])
+        if tgt in clearing and src not in clearing:
+            found.append(dict(row))
+    return found
+
+
+async def _detach_external_foreign_keys(session: AsyncSession, foreign_keys: list[dict]) -> list[str]:
+    """Drop foreign keys owned by other products so TRUNCATE can proceed.
+
+    PostgreSQL refuses TRUNCATE when any foreign key points at the table, even
+    if the referencing table is empty. Constraints are recreated after the
+    truncate. Rows that would point at deleted masters are unlinked or removed.
+    """
+    notes: list[str] = []
+    for fk in foreign_keys:
+        qualified = _qualified(fk["src_schema"], fk["src_table"])
+        columns = _split_columns(fk["src_columns"])
+        if columns:
+            where = " OR ".join(f"{_ident(column)} IS NOT NULL" for column in columns)
+            count_result = await session.execute(text(f"SELECT COUNT(*) FROM {qualified} WHERE {where}"))
+            row_count = int(count_result.scalar() or 0)
+            if row_count:
+                label = f"{fk['src_schema']}.{fk['src_table']}"
+                if fk["all_nullable"]:
+                    assignments = ", ".join(f"{_ident(column)} = NULL" for column in columns)
+                    await session.execute(text(f"UPDATE {qualified} SET {assignments} WHERE {where}"))
+                    notes.append(f"unlinked {row_count} row(s) in {label}")
+                else:
+                    await session.execute(text(f"DELETE FROM {qualified} WHERE {where}"))
+                    notes.append(f"removed {row_count} dependent row(s) from {label}")
+        await session.execute(
+            text(f"ALTER TABLE {qualified} DROP CONSTRAINT {_ident(str(fk['conname']))}")
+        )
+    return notes
+
+
+def _restore_external_foreign_keys_sql(foreign_keys: list[dict]) -> list[str]:
+    statements: list[str] = []
+    for fk in foreign_keys:
+        qualified = _qualified(fk["src_schema"], fk["src_table"])
+        statements.append(
+            f"ALTER TABLE {qualified} ADD CONSTRAINT {_ident(str(fk['conname']))} {_fk_definition(fk)}"
+        )
+    return statements
 
 
 @router.get("/db-tables", response_model=list[TableInfo])
@@ -225,7 +388,8 @@ async def clear_tables(
 
     Tables are truncated together in a single statement so foreign keys between
     the selected tables are respected. Protected tables (hospital information,
-    migration state) are always skipped.
+    users, menus) are always skipped. Foreign keys from other products that
+    share core masters are detached for the truncate and put back afterward.
     """
     if payload.password != CLEAR_DB_PASSWORD:
         raise HTTPException(
@@ -241,8 +405,12 @@ async def clear_tables(
         )
 
     app_tables = await _list_app_tables(session)
-    by_name = {name: schema for schema, name in app_tables}
-    existing = set(by_name)
+    schemas_for: dict[str, list[str]] = {}
+    for schema, name in app_tables:
+        schemas_for.setdefault(name, [])
+        if schema not in schemas_for[name]:
+            schemas_for[name].append(schema)
+    existing = set(schemas_for)
     unknown = requested - existing
     if unknown:
         raise HTTPException(
@@ -258,34 +426,58 @@ async def clear_tables(
             detail="Only protected tables were selected; nothing to clear.",
         )
 
+    clear_pairs = [
+        (schema, name) for name in to_clear for schema in schemas_for[name]
+    ]
     total_rows = 0
-    for name in to_clear:
+    for schema, name in clear_pairs:
         try:
-            q = _qualified(by_name[name], name)
-            count_result = await session.execute(text(f"SELECT COUNT(*) FROM {q}"))
+            count_result = await session.execute(
+                text(f"SELECT COUNT(*) FROM {_qualified(schema, name)}")
+            )
             total_rows += int(count_result.scalar() or 0)
         except Exception:
             pass
 
-    table_list = ", ".join(_qualified(by_name[name], name) for name in to_clear)
+    blockers = await _blocking_foreign_keys(session, set(clear_pairs))
+    in_app = [fk for fk in blockers if fk["src_schema"] in _APP_SCHEMAS]
+    external = [fk for fk in blockers if fk["src_schema"] not in _APP_SCHEMAS]
+    if in_app:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_kept_table_message(in_app),
+        )
+
+    table_list = ", ".join(_qualified(schema, name) for schema, name in clear_pairs)
+    external_notes: list[str] = []
     try:
+        external_notes = await _detach_external_foreign_keys(session, external)
         await session.execute(text(f"TRUNCATE TABLE {table_list} RESTART IDENTITY"))
+        for statement in _restore_external_foreign_keys_sql(external):
+            await session.execute(text(statement))
         await session.commit()
     except Exception as exc:  # noqa: BLE001 - surface DB detail to the operator
         await session.rollback()
-        detail = str(getattr(exc, "orig", exc)).strip() or str(exc)
+        orig = getattr(exc, "orig", exc)
+        detail = str(orig).strip() or str(exc)
+        extra = getattr(orig, "detail", None)
+        if extra:
+            extra_text = str(extra).strip()
+            if extra_text and extra_text not in detail:
+                detail = f"{detail}\n{extra_text}"
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Could not clear the selected tables because another table you "
-                "chose to keep still depends on them. Either also select the "
-                f"dependent table(s) or keep both.\n\nDatabase said: {detail}"
+                "Could not clear the selected tables because another table still "
+                f"depends on them.\n\nDatabase said: {detail}"
             ),
         ) from exc
 
     msg = f"Cleared {len(to_clear)} table(s); about {total_rows} row(s) removed."
     if skipped_protected:
         msg += f" Skipped protected: {', '.join(skipped_protected)}."
+    if external_notes:
+        msg += " " + "; ".join(external_notes) + "."
     return ClearTablesResponse(
         cleared=to_clear,
         skipped_protected=skipped_protected,

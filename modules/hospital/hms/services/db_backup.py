@@ -16,7 +16,7 @@ from urllib.parse import unquote, urlparse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules.hospital.hms.config import get_settings
-from erp_core.database import AsyncSessionLocal
+from erp_core.database import get_session_factory
 from modules.hospital.hms.hms_env import resolve_hms_root
 from modules.hospital.hms.models.hospital_profile import HospitalProfile
 from modules.hospital.hms.repositories.hospital_profile import HospitalProfileRepository
@@ -527,7 +527,7 @@ async def run_scheduled_backup_if_due() -> None:
     if _retry_after is not None and now < _retry_after:
         return
 
-    async with AsyncSessionLocal() as session:
+    async with get_session_factory()() as session:
         profile = await HospitalProfileRepository(session).get_singleton()
         if profile is None or not profile.backup_enabled:
             return
@@ -546,7 +546,7 @@ async def run_scheduled_backup_if_due() -> None:
     if outcome.status in {"skipped", "busy"}:
         return
 
-    async with AsyncSessionLocal() as session:
+    async with get_session_factory()() as session:
         profile = await HospitalProfileRepository(session).get_or_create_default()
         _apply_outcome(profile, outcome)
         await session.commit()

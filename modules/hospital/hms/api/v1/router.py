@@ -4,13 +4,14 @@ from modules.hospital.hms.api.v1.endpoints import (
     admin,
     backup,
     legacy_migrate,
+    mdb_migrate,
     auth,
     authorities,
     bill_identity,
     billing_packages,
     billing_structure,
     billing_types,
-    service_categories,
+    service_groups,
     service_sub_categories,
     short_bills,
     single_service_opd,
@@ -96,7 +97,7 @@ api_router.include_router(
     billing_structure.router, prefix="/billing-structure", tags=["billing-structure"]
 )
 api_router.include_router(
-    service_categories.router, prefix="/service-categories", tags=["service-categories"]
+    service_groups.router, prefix="/service-groups", tags=["service-groups"]
 )
 api_router.include_router(
     billing_packages.router, prefix="/billing-packages", tags=["billing-packages"]
@@ -140,4 +141,7 @@ api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(backup.router, prefix="/backup", tags=["backup"])
 api_router.include_router(
     legacy_migrate.router, prefix="/admin", tags=["admin", "legacy-migrate"]
+)
+api_router.include_router(
+    mdb_migrate.router, prefix="/admin", tags=["admin", "mdb-migrate"]
 )

@@ -27,12 +27,13 @@ export function PharmacyPartyMasterPage({
       listParams={{ master_type: typeCode }}
       defaults={{ sort_order: 0, is_active: true }}
       fields={[
-        { key: 'code', label: 'Code', readOnlyAlways: true, placeholder: 'Auto' },
+        { key: 'code', label: 'Code', placeholder: 'Auto', readOnlyOnModify: true },
         { key: 'name', label: 'Name', required: true },
         { key: 'sort_order', label: 'Sort Order', type: 'number' },
       ]}
       mapCreate={(f) => ({
         master_type: typeCode,
+        code: String(f.code ?? '').trim() || null,
         name: String(f.name || '').trim(),
         sort_order: Number(f.sort_order) || 0,
         is_active: true,

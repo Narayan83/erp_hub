@@ -19,6 +19,9 @@ from erp_core.security import get_password_hash
 from erp_core.services.menu import SUPER_ADMIN_ROLE
 
 
+# Platform menus seeded for every product (including new ones with menu_mode=extend).
+# Print Master + Bill Template Designer use shared core APIs/pages so per-PC printers
+# and designed layouts work without product-specific code.
 CORE_MENUS: list[tuple[str, str, str | None, int]] = [
     ("dashboard", "Dashboard", None, 1),
     ("accounts", "Accounts", None, 30),
@@ -122,9 +125,13 @@ async def seed_initial_data(session: AsyncSession) -> None:
         menu.parent_id = code_to_id.get(parent_code) if parent_code else None
 
     # Other products' menus stay in the shared database but must not appear here.
+    # sso_* / sbt_* are created from Single Service OPD and Short Bill setup.
     for menu in existing_by_code.values():
-        if menu.code not in wanted:
-            menu.is_active = False
+        if menu.code in wanted:
+            continue
+        if menu.module == product and (menu.code or "").startswith(("sso_", "sbt_")):
+            continue
+        menu.is_active = False
 
     # User type + Super Admin
     ut = (await session.execute(select(UserType).where(UserType.code == "admin"))).scalar_one_or_none()
@@ -277,7 +284,9 @@ async def seed_initial_data(session: AsyncSession) -> None:
         await session.execute(select(Ledger).where(Ledger.system_key == "CASH"))
     ).scalar_one_or_none()
     pm = (await session.execute(select(PaymentMode).where(PaymentMode.code == "CASH"))).scalar_one_or_none()
-    if not pm:
+    any_mode = (await session.execute(select(PaymentMode.id).limit(1))).first()
+    # Don't add a second cash mode when this hospital already uses its own codes.
+    if not pm and any_mode is None:
         session.add(
             PaymentMode(
                 code="CASH",
@@ -289,9 +298,18 @@ async def seed_initial_data(session: AsyncSession) -> None:
         )
 
     if not (
-        await session.execute(select(PrintConfig).where(PrintConfig.code == "DEFAULT"))
+        await session.execute(
+            select(PrintConfig).where(
+                PrintConfig.product == product, PrintConfig.code == "DEFAULT"
+            )
+        )
     ).scalar_one_or_none():
-        session.add(PrintConfig(code="DEFAULT", name="Default A4", paper_size="A4"))
+        session.add(
+            PrintConfig(product=product, code="DEFAULT", name="Default A4", paper_size="A4")
+        )
+
+    # autoflush is off, so product seeds must see rows queued above (payment modes, ledgers).
+    await session.flush()
 
     if module_enabled("hospital"):
         from modules.hospital.hms.seeds.bootstrap import seed_hospital_domain

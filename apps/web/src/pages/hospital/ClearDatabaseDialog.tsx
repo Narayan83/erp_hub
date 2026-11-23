@@ -129,7 +129,7 @@ export function ClearDatabaseDialog({ open, onClose }: Props) {
           to get a fresh database for a NEW hospital. Tick what to reset; UNTICK any master data you
           want to keep. Hospital information, users and menus are always kept.
         </div>
-        {error && <div className="hms-error">{error}</div>}
+        {error && <div className="hms-error" style={{ whiteSpace: 'pre-wrap' }}>{error}</div>}
         {ok && <div className="hms-ok" style={{ whiteSpace: 'pre-wrap' }}>{ok}</div>}
 
         <div className="hms-actions" style={{ marginTop: 0 }}>

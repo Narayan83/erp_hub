@@ -6,20 +6,38 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from erp_core.models.auth import Menu
 from erp_core.models.masters import PrintConfig
-from erp_core.product_config import module_enabled
+from erp_core.printing.layouts import (
+    DOCUMENT_NAMES,
+    KIND_BILL,
+    _BILL_CODES,
+    single_service_option_layout_code,
+)
+from erp_core.product_config import enabled_modules, get_product_name, module_enabled
+from erp_core.printing.local import get_report_printer, set_report_printer
 from erp_core.repositories.print_configs import PrintConfigRepository
 from erp_core.schemas.print_configs import PrintConfigCreate, PrintConfigRead, PrintConfigUpdate
 
+_EXCLUDED_MENU_CODES = frozenset({"print_master", "print_template_designer"})
+
+
+def _with_local_printer(item: PrintConfig) -> PrintConfigRead:
+    """Overlay this PC's print.ini printer; blank means Windows default."""
+    data = PrintConfigRead.model_validate(item)
+    local = get_report_printer(item.code)
+    # Never fall back to the shared DB printer — that would couple stations.
+    return data.model_copy(update={"printer_name": local})
+
 
 class PrintConfigService:
-    def __init__(self, session: AsyncSession):
-        self.repo = PrintConfigRepository(session)
+    def __init__(self, session: AsyncSession, product: str | None = None):
+        self.repo = PrintConfigRepository(session, product=product)
 
     # ── optional hospital enrichment (single-service OPD bill templates) ──────
 
-    async def single_service_options(self) -> list[tuple[str, str]]:
-        """Active single-service OPD options as (id, name); [] when hospital is not enabled."""
+    async def single_service_option_details(self) -> list[tuple[str, str, str]]:
+        """Active single-service OPD options as (id, name, menu_code); [] when hospital is disabled."""
         try:
             if not module_enabled("hospital"):
                 return []
@@ -28,13 +46,25 @@ class PrintConfigService:
             # Savepoint: a missing table must not poison the caller's transaction.
             async with self.repo.session.begin_nested():
                 result = await self.repo.session.execute(
-                    select(SingleServiceOpdOption.id, SingleServiceOpdOption.name)
+                    select(
+                        SingleServiceOpdOption.id,
+                        SingleServiceOpdOption.name,
+                        SingleServiceOpdOption.menu_code,
+                    )
                     .where(SingleServiceOpdOption.is_active.is_(True))
                     .order_by(SingleServiceOpdOption.sort_order, SingleServiceOpdOption.name)
                 )
-                return [(str(option_id), name) for option_id, name in result.all()]
+                return [
+                    (str(option_id), str(name or ""), str(menu_code or ""))
+                    for option_id, name, menu_code in result.all()
+                ]
         except Exception:
             return []
+
+    async def single_service_options(self) -> list[tuple[str, str]]:
+        """Active single-service OPD options as (id, name); [] when hospital is not enabled."""
+        details = await self.single_service_option_details()
+        return [(option_id, name) for option_id, name, _menu_code in details]
 
     async def single_service_option_name(self, option_id: str) -> str | None:
         """Name of an active single-service OPD option, or None when missing / hospital disabled."""
@@ -56,13 +86,155 @@ class PrintConfigService:
         except Exception:
             return None
 
+    # ── product-scoped menu & document catalog ────────────────────────────────
+
+    async def active_product_menus(self) -> list[tuple[str, str]]:
+        """Active leaf menus for the running product in sidebar tree order."""
+        active_modules = set(enabled_modules())
+        rows = (
+            await self.repo.session.execute(
+                select(Menu)
+                .where(Menu.is_active.is_(True), Menu.module.in_(active_modules))
+                .order_by(Menu.sort_order, Menu.label)
+            )
+        ).scalars().all()
+        if not rows:
+            return []
+
+        parent_ids = {m.parent_id for m in rows if m.parent_id}
+        by_parent: dict[str | None, list[Menu]] = {}
+        for menu in rows:
+            by_parent.setdefault(menu.parent_id, []).append(menu)
+
+        ordered: list[tuple[str, str]] = []
+        visited: set[str] = set()
+
+        def walk(parent_id: str | None) -> None:
+            for menu in by_parent.get(parent_id, []):
+                if menu.id in visited:
+                    continue
+                visited.add(menu.id)
+                if menu.id in parent_ids:
+                    walk(menu.id)
+                    continue
+                code = (menu.code or "").strip()
+                if not code or code.lower() in _EXCLUDED_MENU_CODES:
+                    continue
+                ordered.append((code, (menu.label or code).strip()))
+
+        walk(None)
+        # Include any active leaf whose parent was inactive/missing so nothing is dropped.
+        for menu in rows:
+            if menu.id in visited or menu.id in parent_ids:
+                continue
+            code = (menu.code or "").strip()
+            if not code or code.lower() in _EXCLUDED_MENU_CODES:
+                continue
+            ordered.append((code, (menu.label or code).strip()))
+        return ordered
+
+    async def product_documents(self) -> list[dict[str, str]]:
+        """Documents available in Bill Template Designer for the active product only.
+
+        - Hospital keeps its fixed bill/report codes + active single-service options,
+          followed by every remaining active hospital menu.
+        - All other products load every active menu of that product (no hospital items).
+        - Active PrintConfig rows created in Print Master for this product are included too.
+        """
+        product = self.repo.product
+        docs: list[dict[str, str]] = []
+        seen_codes: set[str] = set()
+        covered_sso_menu_codes: set[str] = set()
+
+        if product == "hospital" and module_enabled("hospital"):
+            for code, name in DOCUMENT_NAMES.items():
+                docs.append(
+                    {
+                        "code": code,
+                        "name": name,
+                        "kind": KIND_BILL if code in _BILL_CODES else "report",
+                    }
+                )
+                seen_codes.add(code)
+
+            sso_extra: list[dict[str, str]] = []
+            for option_id, name, menu_code in await self.single_service_option_details():
+                label = (name or "").strip()
+                if not label:
+                    continue
+                try:
+                    sso_code = single_service_option_layout_code(option_id)
+                except ValueError:
+                    continue
+                if sso_code in seen_codes:
+                    continue
+                sso_extra.append({"code": sso_code, "name": label, "kind": KIND_BILL})
+                seen_codes.add(sso_code)
+                if menu_code:
+                    covered_sso_menu_codes.add(menu_code.strip().lower())
+            if sso_extra:
+                insert_at = next(
+                    (
+                        idx + 1
+                        for idx, doc in enumerate(docs)
+                        if doc["code"] == "SINGLE_SERVICE_OPD"
+                    ),
+                    len(docs),
+                )
+                docs[insert_at:insert_at] = sso_extra
+
+        for menu_code, menu_label in await self.active_product_menus():
+            if menu_code.lower() in covered_sso_menu_codes:
+                continue
+            doc_code = menu_code.upper()
+            if doc_code in seen_codes:
+                continue
+            docs.append(
+                {
+                    "code": doc_code,
+                    "name": menu_label,
+                    "kind": KIND_BILL,
+                    "menu_code": menu_code,
+                }
+            )
+            seen_codes.add(doc_code)
+
+        for cfg in await self.repo.list_active():
+            doc_code = (cfg.code or "").strip().upper()
+            if not doc_code or doc_code in seen_codes:
+                continue
+            docs.append(
+                {
+                    "code": doc_code,
+                    "name": (cfg.name or doc_code).strip(),
+                    "kind": KIND_BILL,
+                }
+            )
+            seen_codes.add(doc_code)
+
+        return docs
+
+    async def resolve_document(self, code: str) -> tuple[str, str] | None:
+        """Resolve a document code strictly within the active product's catalog."""
+        code_u = (code or "").strip().upper()
+        if not code_u:
+            return None
+        for doc in await self.product_documents():
+            if doc["code"] == code_u:
+                return doc["code"], doc["name"]
+        return None
+
     # ── layouts ───────────────────────────────────────────────────────────────
 
     async def designed_layout_entries(self) -> list[tuple[str, Any]]:
-        """Newest designed templates first, so a shared page keeps one design."""
+        """Newest designed templates first, scoped strictly to the active product."""
         result = await self.repo.session.execute(
             select(PrintConfig.code, PrintConfig.layout_options)
-            .where(PrintConfig.layout_options.is_not(None))
+            .where(
+                PrintConfig.product == self.repo.product,
+                PrintConfig.is_active.is_(True),
+                PrintConfig.layout_options.is_not(None),
+            )
             .order_by(PrintConfig.updated_at.desc())
         )
         return [(str(code), layout) for code, layout in result.all()]
@@ -71,19 +243,19 @@ class PrintConfigService:
 
     async def list_configs(self) -> list[PrintConfigRead]:
         items = await self.repo.list_active()
-        return [PrintConfigRead.model_validate(item) for item in items]
+        return [_with_local_printer(item) for item in items]
 
     async def get_config(self, config_id: str) -> PrintConfigRead:
         item = await self.repo.get_by_id(config_id)
         if not item or not item.is_active:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Print config not found")
-        return PrintConfigRead.model_validate(item)
+        return _with_local_printer(item)
 
     async def get_config_by_code(self, code: str) -> PrintConfigRead:
         item = await self.repo.get_by_code(code)
         if not item or not item.is_active:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Print config not found")
-        return PrintConfigRead.model_validate(item)
+        return _with_local_printer(item)
 
     async def create_config(self, data: PrintConfigCreate) -> PrintConfigRead:
         code = data.code.strip().upper()
@@ -96,14 +268,17 @@ class PrintConfigService:
                 )
             self._apply_create_fields(existing, data)
             existing.is_active = True
+            set_report_printer(code, data.printer_name)
             await self.repo.session.flush()
             await self.repo.session.refresh(existing)
-            return PrintConfigRead.model_validate(existing)
+            return _with_local_printer(existing)
 
         item = PrintConfig(
+            product=self.repo.product,
             code=code,
             name=data.name.strip(),
-            printer_name=(data.printer_name.strip() if data.printer_name else None),
+            # Printer is per-PC (print.ini), not shared in the database.
+            printer_name=None,
             paper_size=data.paper_size,
             custom_width_mm=data.custom_width_mm,
             custom_height_mm=data.custom_height_mm,
@@ -118,20 +293,26 @@ class PrintConfigService:
             is_active=True,
         )
         self.repo.session.add(item)
+        set_report_printer(code, data.printer_name)
         await self.repo.session.flush()
         await self.repo.session.refresh(item)
-        return PrintConfigRead.model_validate(item)
+        return _with_local_printer(item)
 
     async def update_config(self, config_id: str, data: PrintConfigUpdate) -> PrintConfigRead:
         item = await self.repo.get_by_id(config_id)
         if not item or not item.is_active:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Print config not found")
-        for field, value in data.model_dump(exclude_unset=True).items():
+        payload = data.model_dump(exclude_unset=True)
+        printer_set = "printer_name" in payload
+        printer_name = payload.pop("printer_name", None) if printer_set else None
+        for field, value in payload.items():
             if field == "name" and value is not None:
                 value = value.strip()
-            elif field == "printer_name":
-                value = value.strip() if value else None
             setattr(item, field, value)
+        if printer_set:
+            set_report_printer(item.code, printer_name)
+            # Keep DB column empty so other workstations are not forced to this printer.
+            item.printer_name = None
         if item.paper_size == "CUSTOM" and (not item.custom_width_mm or not item.custom_height_mm):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -139,7 +320,7 @@ class PrintConfigService:
             )
         await self.repo.session.flush()
         await self.repo.session.refresh(item)
-        return PrintConfigRead.model_validate(item)
+        return _with_local_printer(item)
 
     async def delete_config(self, config_id: str) -> PrintConfigRead:
         item = await self.repo.get_by_id(config_id)
@@ -148,12 +329,12 @@ class PrintConfigService:
         item.is_active = False
         await self.repo.session.flush()
         await self.repo.session.refresh(item)
-        return PrintConfigRead.model_validate(item)
+        return _with_local_printer(item)
 
     @staticmethod
     def _apply_create_fields(item: PrintConfig, data: PrintConfigCreate) -> None:
         item.name = data.name.strip()
-        item.printer_name = data.printer_name.strip() if data.printer_name else None
+        item.printer_name = None
         item.paper_size = data.paper_size
         item.custom_width_mm = data.custom_width_mm
         item.custom_height_mm = data.custom_height_mm

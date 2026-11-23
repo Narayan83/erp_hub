@@ -20,6 +20,7 @@ type Option = {
   doctor_id: string | null
   doctor_name: string | null
   use_patient_id: boolean
+  services_start_unselected?: boolean
   default_rate: number | string
   bill_prefix: string
   services: OptionService[]
@@ -61,6 +62,7 @@ export function SingleServiceOpdBillPage({ menuCode, title }: Props) {
   const [patientName, setPatientName] = useState('')
   const [rates, setRates] = useState<Record<string, string>>({})
   const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [serviceQuery, setServiceQuery] = useState('')
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<Bill[]>([])
   const [fromDate, setFromDate] = useState(todayIso())
@@ -95,13 +97,15 @@ export function SingleServiceOpdBillPage({ menuCode, title }: Props) {
     setDoctorId(o?.doctor_id || '')
     const r: Record<string, string> = {}
     let amount = 0
+    const startUnselected = Boolean(o?.services_start_unselected)
     for (const s of o?.services || []) {
       const rate = Number(s.rate ?? o?.default_rate ?? 0) || 0
       r[s.service_id] = String(s.rate ?? o?.default_rate ?? 0)
-      amount += rate
+      if (!startUnselected) amount += rate
     }
     setRates(r)
-    setPicked(new Set((o?.services || []).map((s) => s.service_id)))
+    setPicked(startUnselected ? new Set() : new Set((o?.services || []).map((s) => s.service_id)))
+    setServiceQuery('')
     setPay(fillCash(pm, amount))
   }, [fillCash])
 
@@ -204,6 +208,53 @@ export function SingleServiceOpdBillPage({ menuCode, title }: Props) {
     setPay((prev) => fillCash(modes, amount, prev))
   }
 
+  function billServiceMatches(s: OptionService, q: string) {
+    return s.service_name.toLowerCase().includes(q) || (s.service_code || '').toLowerCase().includes(q)
+  }
+
+  const visibleBillServices = useMemo(() => {
+    const list = option?.services || []
+    const q = serviceQuery.trim().toLowerCase()
+    if (!q) return list
+    return list.filter((s) => billServiceMatches(s, q))
+  }, [option, serviceQuery])
+
+  const allVisibleChecked =
+    visibleBillServices.length > 0 && visibleBillServices.every((s) => picked.has(s.service_id))
+
+  function setPickedServices(next: Set<string>) {
+    setPicked(next)
+    applyServiceChange(next, rates)
+  }
+
+  function toggleVisibleServices(on: boolean) {
+    const next = new Set(picked)
+    for (const s of visibleBillServices) {
+      if (on) next.add(s.service_id)
+      else next.delete(s.service_id)
+    }
+    setPickedServices(next)
+  }
+
+  function selectMatchingBillServices(q: string) {
+    const found = (option?.services || []).filter((s) => billServiceMatches(s, q))
+    if (!found.length) return
+    const next = new Set(picked)
+    for (const s of found) next.add(s.service_id)
+    setPickedServices(next)
+  }
+
+  function onServiceQuery(value: string) {
+    setServiceQuery(value)
+    const q = value.trim().toLowerCase()
+    if (!q) return
+    const found = (option?.services || []).filter((s) => billServiceMatches(s, q))
+    if (found.length !== 1 || picked.has(found[0].service_id)) return
+    const next = new Set(picked)
+    next.add(found[0].service_id)
+    setPickedServices(next)
+  }
+
   function load(b: Bill) {
     setBillId(b.id)
     setBillNo(b.bill_no)
@@ -214,6 +265,7 @@ export function SingleServiceOpdBillPage({ menuCode, title }: Props) {
         : null,
     )
     setPatientName(b.patient_name)
+    setServiceQuery('')
     setPicked(new Set(b.services.map((s) => s.service_id)))
     setRates((prev) => {
       const next = { ...prev }
@@ -232,8 +284,8 @@ export function SingleServiceOpdBillPage({ menuCode, title }: Props) {
     setOk(null)
   }
 
-  async function search(e: FormEvent) {
-    e.preventDefault()
+  async function search(e?: FormEvent) {
+    e?.preventDefault()
     if (!option || !q.trim()) return
     setError(null)
     try {
@@ -323,49 +375,6 @@ export function SingleServiceOpdBillPage({ menuCode, title }: Props) {
       )}
       <Banner error={error} ok={ok} />
 
-      <form className="hms-toolbar" onSubmit={search}>
-        <label>Find bill</label>
-        <input
-          className="hms-field"
-          style={{ width: 240 }}
-          placeholder="Bill no / patient name"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <button className="hms-btn" type="submit" disabled={!option}>
-          Search
-        </button>
-        <button className="hms-btn" type="button" onClick={() => resetForm(option, modes)}>
-          New
-        </button>
-      </form>
-      {hits.length > 0 && (
-        <div className="hms-table-wrap" style={{ maxHeight: 180, marginBottom: 8 }}>
-          <table className="hms-table">
-            <thead>
-              <tr>
-                <th>Bill No</th>
-                <th>Date</th>
-                <th>Patient</th>
-                <th>Services</th>
-                <th>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {hits.map((b) => (
-                <tr key={b.id} onClick={() => load(b)}>
-                  <td>{b.bill_no}</td>
-                  <td>{b.bill_date}</td>
-                  <td>{b.patient_name}</td>
-                  <td>{b.service_name}</td>
-                  <td>{fmtMoney(b.rate)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
       <form className="hms-box" onSubmit={onSave}>
         <div className="hms-box-title">{billId ? `Modify bill ${billNo}` : 'New bill'}</div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -408,14 +417,35 @@ export function SingleServiceOpdBillPage({ menuCode, title }: Props) {
               <table className="hms-table">
                 <thead>
                   <tr>
-                    <th />
-                    <th>Code</th>
-                    <th>Service</th>
+                    <th style={{ width: 22 }}>
+                      <input
+                        type="checkbox"
+                        title="Select all"
+                        checked={allVisibleChecked}
+                        disabled={visibleBillServices.length === 0}
+                        onChange={(e) => toggleVisibleServices(e.target.checked)}
+                      />
+                    </th>
+                    <th style={{ padding: '2px 4px' }}>
+                      <input
+                        className="hms-field"
+                        style={{ width: 180, height: 22 }}
+                        placeholder="Search service"
+                        value={serviceQuery}
+                        onChange={(e) => onServiceQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return
+                          e.preventDefault()
+                          const q = serviceQuery.trim().toLowerCase()
+                          if (q) selectMatchingBillServices(q)
+                        }}
+                      />
+                    </th>
                     <th style={{ width: 100 }}>Rate</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(option?.services || []).map((s) => (
+                  {visibleBillServices.map((s) => (
                     <tr key={s.service_id}>
                       <td>
                         <input
@@ -430,7 +460,6 @@ export function SingleServiceOpdBillPage({ menuCode, title }: Props) {
                           }}
                         />
                       </td>
-                      <td>{s.service_code}</td>
                       <td>{s.service_name}</td>
                       <td>
                         <input
@@ -449,7 +478,7 @@ export function SingleServiceOpdBillPage({ menuCode, title }: Props) {
                     </tr>
                   ))}
                   <tr>
-                    <td colSpan={3}>
+                    <td colSpan={2}>
                       <strong>Total</strong>
                     </td>
                     <td>
@@ -514,24 +543,75 @@ export function SingleServiceOpdBillPage({ menuCode, title }: Props) {
           </div>
         </div>
 
-        <div className="hms-actions">
-          <button className="hms-btn hms-btn-primary" type="submit" disabled={busy || !option}>
-            {busy ? '…' : billId ? 'Update' : 'Save'}
-          </button>
-          <button
-            className="hms-btn"
-            type="button"
-            disabled={!billId}
-            onClick={() =>
-              billId &&
-              void openHospitalReport(`/hospital/reports/single-service-opd/${billId}/html`).catch((e) => setError(errMsg(e)))
-            }
-          >
-            Print
-          </button>
-          <button className="hms-btn hms-btn-danger" type="button" disabled={!billId || busy} onClick={() => void onDelete()}>
-            Cancel Bill
-          </button>
+        {hits.length > 0 && (
+          <div className="hms-table-wrap" style={{ maxHeight: 180, marginTop: 8 }}>
+            <table className="hms-table">
+              <thead>
+                <tr>
+                  <th>Bill No</th>
+                  <th>Date</th>
+                  <th>Patient</th>
+                  <th>Services</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hits.map((b) => (
+                  <tr key={b.id} onClick={() => load(b)}>
+                    <td>{b.bill_no}</td>
+                    <td>{b.bill_date}</td>
+                    <td>{b.patient_name}</td>
+                    <td>{b.service_name}</td>
+                    <td>{fmtMoney(b.rate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="hms-actions" style={{ justifyContent: 'space-between' }}>
+          <div className="hms-toolbar" style={{ marginBottom: 0 }}>
+            <button className="hms-btn hms-btn-primary" type="submit" disabled={busy || !option}>
+              {busy ? '…' : billId ? 'Update' : 'Save'}
+            </button>
+            <button
+              className="hms-btn"
+              type="button"
+              disabled={!billId}
+              onClick={() =>
+                billId &&
+                void openHospitalReport(`/hospital/reports/single-service-opd/${billId}/html`).catch((e) => setError(errMsg(e)))
+              }
+            >
+              Print
+            </button>
+            <button className="hms-btn hms-btn-danger" type="button" disabled={!billId || busy} onClick={() => void onDelete()}>
+              Cancel Bill
+            </button>
+          </div>
+          <div className="hms-toolbar" style={{ marginBottom: 0 }}>
+            <label>Find bill</label>
+            <input
+              className="hms-field"
+              style={{ width: 220 }}
+              placeholder="Bill no / patient name"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  void search()
+                }
+              }}
+            />
+            <button className="hms-btn" type="button" disabled={!option} onClick={() => void search()}>
+              Search
+            </button>
+            <button className="hms-btn" type="button" onClick={() => resetForm(option, modes)}>
+              New
+            </button>
+          </div>
         </div>
       </form>
 

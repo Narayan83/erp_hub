@@ -51,7 +51,7 @@ from modules.hospital.hms.models.print_config import PrintConfig
 from modules.hospital.hms.models.procedure_type import ProcedureType
 from modules.hospital.hms.models.role import Role
 from modules.hospital.hms.models.role_menu_permission import RoleMenuPermission
-from modules.hospital.hms.models.service_category import ServiceCategory
+from modules.hospital.hms.models.service_group import ServiceGroup
 from modules.hospital.hms.models.service_note import ServiceNote
 from modules.hospital.hms.models.service_sub_category import ServiceSubCategory
 from modules.hospital.hms.models.short_bill import ShortBill, ShortBillType
@@ -123,7 +123,7 @@ __all__ = [
     "ProcedureType",
     "Role",
     "RoleMenuPermission",
-    "ServiceCategory",
+    "ServiceGroup",
     "ServiceNote",
     "ServiceSubCategory",
     "ShortBill",

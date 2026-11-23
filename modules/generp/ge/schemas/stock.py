@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date as Date
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -30,7 +30,7 @@ class StockVoucherItemIn(BaseModel):
 
 class StockVoucherIn(BaseModel):
     voucher_type: str
-    voucher_date: date
+    voucher_date: Date
     branch_id: str | None = None
     counterparty_branch_id: str | None = None
     party_id: str | None = None
@@ -57,7 +57,7 @@ class StockVoucherOut(BaseModel):
     id: str
     voucher_type: str
     voucher_no: str
-    voucher_date: date
+    voucher_date: Date
     branch_id: str | None = None
     branch_name: str | None = None
     counterparty_branch_id: str | None = None
@@ -74,7 +74,7 @@ class StockVoucherListItem(BaseModel):
     id: str
     voucher_type: str
     voucher_no: str
-    voucher_date: date
+    voucher_date: Date
     narration: str | None = None
     is_cancelled: bool
     item_count: int = 0
@@ -82,7 +82,7 @@ class StockVoucherListItem(BaseModel):
 
 class StockLedgerRow(BaseModel):
     id: str
-    movement_date: date
+    movement_date: Date
     product_id: str
     product_code: str | None = None
     product_name: str | None = None
@@ -119,7 +119,7 @@ class OrderItemIn(BaseModel):
 
 class OrderIn(BaseModel):
     order_type: str
-    order_date: date
+    order_date: Date
     party_id: str | None = None
     narration: str | None = None
     discount_scheme_id: str | None = None
@@ -147,7 +147,7 @@ class OrderOut(BaseModel):
     id: str
     order_type: str
     order_no: str
-    order_date: date
+    order_date: Date
     party_id: str | None = None
     party_name: str | None = None
     status: str
@@ -166,7 +166,7 @@ class OrderListItem(BaseModel):
     id: str
     order_type: str
     order_no: str
-    order_date: date
+    order_date: Date
     party_name: str | None = None
     status: str
     net_amount: float
@@ -193,8 +193,8 @@ class DiscountSchemeIn(BaseModel):
     max_discount_amount: float | None = None
     product_id: str | None = None
     category_id: str | None = None
-    valid_from: date | None = None
-    valid_to: date | None = None
+    valid_from: Date | None = None
+    valid_to: Date | None = None
     applies_to: str = "ALL"
     narration: str | None = None
     is_active: bool = True
@@ -251,7 +251,7 @@ class StockBarcodeHit(BaseModel):
 
 
 class BarcodeStockRow(BaseModel):
-    date: date
+    date: Date
     lot_name: str = ""
     product_name: str = ""
     product_code: str = ""
@@ -288,7 +288,7 @@ class ItemStockRow(BaseModel):
 class MovementStockRow(BaseModel):
     lot_name: str = ""
     lot_code: str = ""
-    date: date | None = None
+    date: Date | None = None
     product_code: str = ""
     product_name: str = ""
     p_qty: float = 0

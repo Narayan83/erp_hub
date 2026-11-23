@@ -300,6 +300,23 @@ class SummaryRow(BaseModel):
     name_kn: str
     balance: float
     share_nos: str = ""
+    share_no: str = ""
+    village_en: str = ""
+    village_kn: str = ""
+    post_en: str = ""
+    post_kn: str = ""
+    taluk_en: str = ""
+    taluk_kn: str = ""
+    district_en: str = ""
+    district_kn: str = ""
+    category: str = ""
+    sex: str = ""
+    mobile: str = ""
+    phone: str = ""
+    share_type_code: int = 0
+    share_type_name: str = ""
+    share_type_prefix: str = ""
+    share_type_label: str = ""
 
 
 class SummaryList(BaseModel):

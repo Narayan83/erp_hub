@@ -107,7 +107,7 @@ export function PathologyBillPage({ mode = 'create', initialBillId }: Props) {
         api.get<Department[]>('/hospital/departments'),
         api.get<CatalogService[]>('/hospital/pathology-bills/catalog/services'),
         api.get<PayMode[]>('/hospital/payment-modes').catch(() => api.get<PayMode[]>('/accounts/payment-modes')),
-        api.get<Array<{ id: string; name: string }>>('/hospital/service-categories'),
+        api.get<Array<{ id: string; name: string }>>('/hospital/service-groups'),
         api.get<Array<{ id: string; name: string }>>('/hospital/billing-packages').catch(() => []),
       ])
       setDoctors(docs)
@@ -133,13 +133,13 @@ export function PathologyBillPage({ mode = 'create', initialBillId }: Props) {
     const q = catalogSearch.trim().toLowerCase()
     setCatalogRows(
       catalogAll
-        .filter((s) => !categoryId || s.category_id === categoryId)
+        .filter((s) => !categoryId || s.group_id === categoryId)
         .filter(
           (s) =>
             !q ||
             s.name.toLowerCase().includes(q) ||
             s.code.toLowerCase().includes(q) ||
-            (s.category_name || '').toLowerCase().includes(q),
+            (s.group_name || '').toLowerCase().includes(q),
         )
         .map((s) => ({ ...s, qty: 1, checked: false, rate: money(s.rate) })),
     )
@@ -256,7 +256,7 @@ export function PathologyBillPage({ mode = 'create', initialBillId }: Props) {
           service_id: row.id,
           service_code: row.code,
           service_name: row.name,
-          category_name: row.category_name,
+          category_name: row.group_name,
           quantity: row.qty || 1,
           rate: money(row.rate),
         })
@@ -763,7 +763,7 @@ export function PathologyBillPage({ mode = 'create', initialBillId }: Props) {
                     </td>
                     <td>{money(r.rate).toFixed(2)}</td>
                     <td>{r.code}</td>
-                    <td>{r.category_name}</td>
+                    <td>{r.group_name}</td>
                   </tr>
                 ))}
               </tbody>

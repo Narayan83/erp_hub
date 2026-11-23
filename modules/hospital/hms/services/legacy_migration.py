@@ -1,4 +1,8 @@
-"""Live MySQL (legacy HMS) → PostgreSQL migration helpers.
+"""FoxPro / old MySQL hospital software → this PostgreSQL database.
+
+The previous hospital version reads the FoxPro-era data through MySQL
+(tables such as pmaster, dmaster, trnYYZZ). This module is that same import,
+writing into the current hospital and core schemas.
 
 Default table mappings follow the old software:
   pmaster  → patients          (MRK IS NULL)
@@ -510,13 +514,16 @@ async def load_lookups(session: AsyncSession) -> dict[str, Any]:
             section_by_sort[int(row.code)] = str(row.id)
 
     patient_rows = await session.execute(
-        text("SELECT id, patient_no, old_software_id FROM patients")
+        text("SELECT id, patient_no, old_software_id, party_id FROM patients")
     )
     patient_by_no: dict[str, str] = {}
+    party_by_patient_id: dict[str, str] = {}
     for row in patient_rows.fetchall():
         patient_by_no[str(row.patient_no)] = str(row.id)
         if row.old_software_id:
             patient_by_no[str(row.old_software_id)] = str(row.id)
+        if row.party_id:
+            party_by_patient_id[str(row.id)] = str(row.party_id)
 
     doctor_rows = await session.execute(text("SELECT id, doctor_code FROM doctors"))
     doctor_by_code = {str(row.doctor_code): str(row.id) for row in doctor_rows.fetchall()}
@@ -548,22 +555,23 @@ async def load_lookups(session: AsyncSession) -> dict[str, Any]:
 
     cat = await session.execute(
         text(
-            "SELECT id FROM service_categories "
+            "SELECT id FROM service_groups "
             "WHERE UPPER(code) = 'GEN' OR UPPER(name) LIKE 'GEN%%' "
             "ORDER BY sort_order LIMIT 1"
         )
     )
-    gen_category_id = cat.scalar()
+    gen_group_id = cat.scalar()
 
     return {
         "department_by_sort": department_by_sort,
         "section_by_sort": section_by_sort,
         "patient_by_no": patient_by_no,
+        "party_by_patient_id": party_by_patient_id,
         "doctor_by_code": doctor_by_code,
         "doctor_by_did": doctor_by_did,
         "service_by_code": service_by_code,
         "cash_ledger_id": str(cash_ledger_id) if cash_ledger_id else None,
-        "gen_category_id": str(gen_category_id) if gen_category_id else None,
+        "gen_group_id": str(gen_group_id) if gen_group_id else None,
     }
 
 
@@ -629,14 +637,14 @@ async def _migrate_hospital(session: AsyncSession, rows: list[dict], replace: bo
     row = rows[0]
     data = {
         "code": "MAIN",
-        "name": _clip(row.get("MHD") or "Hospital", 150) or "Hospital",
-        "address_line1": _clip(row.get("ADD1"), 250),
-        "address_line2": _clip(row.get("HD"), 250),
-        "address_line3": _clip(row.get("SHD"), 250),
-        "phone": _clip(row.get("PHONE1"), 20),
-        "mobile": _clip(row.get("ADDPH"), 20),
-        "email": _clip(row.get("EMAIL"), 100),
-        "gstin": _clip(row.get("GSTIN"), 30),
+        "name": _clip(row.get("MHD") or "Hospital", 200) or "Hospital",
+        "address_line1": _clip(row.get("ADD1"), 200),
+        "address_line2": _clip(row.get("HD"), 200),
+        "address_line3": _clip(row.get("SHD"), 200),
+        "phone": _clip(row.get("PHONE1"), 30),
+        "mobile": _clip(row.get("ADDPH"), 100),
+        "email": _clip(row.get("EMAIL"), 255),
+        "gstin": _clip(row.get("GSTIN"), 20),
         "software_id": _clip(row.get("SFTCD"), 50),
     }
     if replace:
@@ -724,6 +732,10 @@ async def _migrate_doctors(session: AsyncSession, rows: list[dict], lookups: dic
             "release_date": _parse_date(row.get("DOR")),
             "morning_token_start": _parse_int(row.get("STKNNO")),
             "evening_token_start": _parse_int(row.get("ESTKNNO")),
+            "appointment_token_start": 1,
+            "appointment_token_end": 5,
+            "online_booking_token_start": 1,
+            "online_booking_token_end": 10,
             "is_pathology_doctor": False,
             "is_active": status in {"", "Y", "YES", "1"},
             "is_existing": True,
@@ -738,6 +750,8 @@ async def _migrate_doctors(session: AsyncSession, rows: list[dict], lookups: dic
                     temp_village, temp_post, temp_taluk, temp_district, temp_pincode,
                     remarks, phone, mobile, mobile2, join_date, qualification, department_id,
                     register_no, release_date, morning_token_start, evening_token_start,
+                    appointment_token_start, appointment_token_end,
+                    online_booking_token_start, online_booking_token_end,
                     is_pathology_doctor, is_active, is_existing, is_reference_doctor,
                     created_at, updated_at
                 ) VALUES (
@@ -746,6 +760,8 @@ async def _migrate_doctors(session: AsyncSession, rows: list[dict], lookups: dic
                     :temp_village, :temp_post, :temp_taluk, :temp_district, :temp_pincode,
                     :remarks, :phone, :mobile, :mobile2, :join_date, :qualification, :department_id,
                     :register_no, :release_date, :morning_token_start, :evening_token_start,
+                    :appointment_token_start, :appointment_token_end,
+                    :online_booking_token_start, :online_booking_token_end,
                     :is_pathology_doctor, :is_active, :is_existing, :is_reference_doctor,
                     NOW(), NOW()
                 )
@@ -769,7 +785,53 @@ async def _migrate_doctors(session: AsyncSession, rows: list[dict], lookups: dic
     return {"imported": imported, "skipped": skipped}
 
 
+async def _insert_patient_party(session: AsyncSession, payload: dict[str, Any]) -> str:
+    """Patients in this version require a core.parties row."""
+    name = " ".join(
+        part
+        for part in (
+            payload.get("first_name"),
+            payload.get("middle_name"),
+            payload.get("last_name"),
+        )
+        if part
+    )
+    party_id = str(uuid4())
+    await session.execute(
+        text(
+            """
+            INSERT INTO parties (
+                id, party_type, code, name,
+                address_line1, address_line2, address_line3, address_line4, pin_code,
+                phone, mobile, opening_balance, opening_type, same_as_billing, is_active,
+                created_at, updated_at
+            ) VALUES (
+                :id, 'customer', :code, :name,
+                :address_line1, :address_line2, :address_line3, :address_line4, :pin_code,
+                :phone, :mobile, 0, 'Dr', true, :is_active,
+                NOW(), NOW()
+            )
+            """
+        ),
+        {
+            "id": party_id,
+            "code": str(payload["patient_no"])[:40],
+            "name": (name or "Patient")[:200],
+            "address_line1": payload.get("contact_address1"),
+            "address_line2": payload.get("contact_address2"),
+            "address_line3": payload.get("contact_address3"),
+            "address_line4": payload.get("contact_address4"),
+            "pin_code": _clip(payload.get("contact_address5"), 20),
+            "phone": _clip(payload.get("phone"), 30),
+            "mobile": _clip(payload.get("mobile"), 30),
+            "is_active": bool(payload.get("is_active", True)),
+        },
+    )
+    return party_id
+
+
 async def _migrate_patients(session: AsyncSession, rows: list[dict], lookups: dict, replace: bool) -> dict:
+    lookups.setdefault("party_by_patient_id", {})
     if replace:
         await session.execute(
             text(
@@ -780,6 +842,19 @@ async def _migrate_patients(session: AsyncSession, rows: list[dict], lookups: di
             )
         )
         lookups["patient_by_no"].clear()
+        lookups.get("party_by_patient_id", {}).clear()
+        await session.execute(
+            text(
+                """
+                DELETE FROM parties p
+                WHERE p.party_type = 'customer'
+                  AND NOT EXISTS (SELECT 1 FROM patients pt WHERE pt.party_id = p.id)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM cashbook_vouchers v WHERE v.party_id = p.id
+                  )
+                """
+            )
+        )
 
     imported = 0
     skipped = 0
@@ -840,18 +915,19 @@ async def _migrate_patients(session: AsyncSession, rows: list[dict], lookups: di
             "patient_type": _clip(row.get("PTYPE"), 50),
             "is_active": status not in {"N", "NO", "0"},
         }
-        await session.execute(
+        payload["party_id"] = await _insert_patient_party(session, payload)
+        result = await session.execute(
             text(
                 """
                 INSERT INTO patients (
-                    id, patient_no, hospital_section_id, title, first_name, middle_name, last_name,
+                    id, party_id, patient_no, hospital_section_id, title, first_name, middle_name, last_name,
                     date_of_birth, age, gender, blood_group,
                     contact_address1, contact_address2, contact_address3, contact_address4, contact_address5,
                     perm_address1, perm_address2, perm_address3, perm_address4, perm_address5,
                     old_software_id, remarks, phone, mobile, mobile2, scheme,
                     is_existing_patient, patient_type, is_active, created_at, updated_at
                 ) VALUES (
-                    :id, :patient_no, :hospital_section_id, :title, :first_name, :middle_name, :last_name,
+                    :id, :party_id, :patient_no, :hospital_section_id, :title, :first_name, :middle_name, :last_name,
                     :date_of_birth, :age, :gender, :blood_group,
                     :contact_address1, :contact_address2, :contact_address3, :contact_address4, :contact_address5,
                     :perm_address1, :perm_address2, :perm_address3, :perm_address4, :perm_address5,
@@ -864,14 +940,20 @@ async def _migrate_patients(session: AsyncSession, rows: list[dict], lookups: di
                     last_name = EXCLUDED.last_name,
                     mobile = EXCLUDED.mobile,
                     old_software_id = COALESCE(EXCLUDED.old_software_id, patients.old_software_id),
+                    party_id = COALESCE(patients.party_id, EXCLUDED.party_id),
                     updated_at = NOW()
+                RETURNING id, party_id
                 """
             ),
             payload,
         )
-        lookups["patient_by_no"][patient_no] = payload["id"]
+        saved = result.mappings().one()
+        real_id = str(saved["id"])
+        lookups["patient_by_no"][patient_no] = real_id
+        if saved["party_id"]:
+            lookups["party_by_patient_id"][real_id] = str(saved["party_id"])
         if payload["old_software_id"]:
-            lookups["patient_by_no"][payload["old_software_id"]] = payload["id"]
+            lookups["patient_by_no"][payload["old_software_id"]] = real_id
         imported += 1
         await tick(imported=imported, skipped=skipped)
     return {"imported": imported, "skipped": skipped}
@@ -882,9 +964,9 @@ async def _migrate_services(session: AsyncSession, rows: list[dict], lookups: di
         await session.execute(
             text(
                 "DELETE FROM patient_service_masters "
-                "WHERE code LIKE 'PS%%' AND (category_id IS NULL OR category_id = :cat)"
+                "WHERE code LIKE 'PS%%' AND (group_id IS NULL OR group_id = :cat)"
             ),
-            {"cat": lookups.get("gen_category_id")},
+            {"cat": lookups.get("gen_group_id")},
         )
 
     imported = 0
@@ -912,7 +994,7 @@ async def _migrate_services(session: AsyncSession, rows: list[dict], lookups: di
             "is_renewal": str(row.get("RNWL") or "N").upper() == "Y",
             "renewal_days": _parse_int(row.get("RNWLDAYS")) or None,
             "is_service_active": status in {"", "Y", "YES", "1"},
-            "category_id": lookups.get("gen_category_id"),
+            "group_id": lookups.get("gen_group_id"),
             "is_active": True,
         }
         await session.execute(
@@ -921,11 +1003,11 @@ async def _migrate_services(session: AsyncSession, rows: list[dict], lookups: di
                 INSERT INTO patient_service_masters (
                     id, code, name, service_charge, rate, is_sharing, doctor_id,
                     show_in_doctor_collection, discount_apply, is_renewal, renewal_days,
-                    is_service_active, category_id, is_active, created_at, updated_at
+                    is_service_active, group_id, is_active, created_at, updated_at
                 ) VALUES (
                     :id, :code, :name, :service_charge, :rate, :is_sharing, :doctor_id,
                     :show_in_doctor_collection, :discount_apply, :is_renewal, :renewal_days,
-                    :is_service_active, :category_id, :is_active, NOW(), NOW()
+                    :is_service_active, :group_id, :is_active, NOW(), NOW()
                 )
                 ON CONFLICT (code) DO UPDATE SET
                     name = EXCLUDED.name,
@@ -1124,6 +1206,9 @@ async def _migrate_cashbook(session: AsyncSession, rows: list[dict], lookups: di
 
         pid = str(row.get("PID") or "").strip()
         patient_id = lookups["patient_by_no"].get(pid) if pid else None
+        party_id = (
+            lookups.get("party_by_patient_id", {}).get(patient_id) if patient_id else None
+        )
         credit = _parse_decimal(row.get("CREDIT"))
         debit = _parse_decimal(row.get("DEBIT"))
         narration = " ".join(
@@ -1135,10 +1220,10 @@ async def _migrate_cashbook(session: AsyncSession, rows: list[dict], lookups: di
                 """
                 INSERT INTO cashbook_vouchers (
                     id, voucher_no, voucher_date, source_type, source_id,
-                    patient_id, patient_no, narration, is_active, created_at, updated_at
+                    patient_id, patient_no, party_id, narration, is_active, created_at, updated_at
                 ) VALUES (
                     :id, :voucher_no, :voucher_date, 'legacy_cashbook', :source_id,
-                    :patient_id, :patient_no, :narration, true, NOW(), NOW()
+                    :patient_id, :patient_no, :party_id, :narration, true, NOW(), NOW()
                 )
                 """
             ),
@@ -1148,7 +1233,8 @@ async def _migrate_cashbook(session: AsyncSession, rows: list[dict], lookups: di
                 "voucher_date": trndt,
                 "source_id": voucher_id,
                 "patient_id": patient_id,
-                "patient_no": pid[:20] if pid else None,
+                "patient_no": pid[:40] if pid else None,
+                "party_id": party_id,
                 "narration": narration or None,
             },
         )
@@ -1866,7 +1952,7 @@ async def _migrate_pathology(
     # ensure LAB category
     cat = await session.execute(
         text(
-            "SELECT id FROM service_categories "
+            "SELECT id FROM service_groups "
             "WHERE UPPER(code) = 'LAB' OR UPPER(name) LIKE 'LAB%%' LIMIT 1"
         )
     )
@@ -1876,7 +1962,7 @@ async def _migrate_pathology(
         await session.execute(
             text(
                 """
-                INSERT INTO service_categories (id, code, name, sort_order, is_active, created_at, updated_at)
+                INSERT INTO service_groups (id, code, name, sort_order, is_active, created_at, updated_at)
                 VALUES (:id, 'LAB', 'Laboratory', 90, true, NOW(), NOW())
                 ON CONFLICT (code) DO NOTHING
                 """
@@ -1884,7 +1970,7 @@ async def _migrate_pathology(
             {"id": lab_cat},
         )
         cat2 = await session.execute(
-            text("SELECT id FROM service_categories WHERE UPPER(code) = 'LAB' LIMIT 1")
+            text("SELECT id FROM service_groups WHERE UPPER(code) = 'LAB' LIMIT 1")
         )
         lab_cat = cat2.scalar() or lab_cat
 
@@ -1911,11 +1997,11 @@ async def _migrate_pathology(
                 INSERT INTO patient_service_masters (
                     id, code, name, service_charge, rate, is_sharing,
                     show_in_doctor_collection, discount_apply, is_renewal,
-                    is_service_active, category_id, is_active, created_at, updated_at
+                    is_service_active, group_id, is_active, created_at, updated_at
                 ) VALUES (
                     :id, :code, :name, :rate, :rate, false,
                     false, false, false,
-                    :active, :category_id, true, NOW(), NOW()
+                    :active, :group_id, true, NOW(), NOW()
                 )
                 ON CONFLICT (code) DO UPDATE SET
                     name = EXCLUDED.name,
@@ -1930,7 +2016,7 @@ async def _migrate_pathology(
                 "name": _clip(row.get("CNAME"), 200) or f"Lab {cd}",
                 "rate": rate,
                 "active": status in {"", "Y", "YES", "1"},
-                "category_id": str(lab_cat),
+                "group_id": str(lab_cat),
             },
         )
         imported += 1
@@ -2030,7 +2116,11 @@ async def _run_migration(
     if postgres_url and display_postgres_url(postgres_url) != display_postgres_url(settings.database_url):
         use_external = True
         info = test_postgres_connection(postgres_url)
-        external_engine = create_async_engine(info["normalized_url"], echo=False)
+        external_engine = create_async_engine(
+            info["normalized_url"],
+            echo=False,
+            connect_args={"server_settings": {"search_path": "hospital, core, public"}},
+        )
         factory = async_sessionmaker(external_engine, class_=AsyncSession, expire_on_commit=False)
         session = factory()
     else:
@@ -2079,103 +2169,104 @@ async def _run_migration(
                     }
                 )
                 try:
-                    if key == "pathology_units":
-                        result = await _migrate_pathology_units(
-                            session,
-                            mysql,
-                            replace_existing,
-                            legacy_table=table,
-                            source_filter=where,
-                        )
-                    elif key == "pathology":
-                        result = await _migrate_pathology(
-                            session,
-                            mysql,
-                            replace_existing,
-                            legacy_table=table,
-                            source_filter=where,
-                        )
-                    elif key == "documents":
-                        if dry_run:
-                            source_rows = _count_rows(mysql, table, where)
-                            result = {
-                                "imported": 0,
-                                "converted_to_pdf": 0,
-                                "source_rows": source_rows,
-                                "dry_run": True,
-                                "message": (
-                                    f"{source_rows:,} patient history document(s) "
-                                    "would be converted to PDF."
-                                ),
-                            }
-                            await _emit_progress(
-                                {
-                                    "type": "rows",
-                                    "activity": "Converting patient history",
-                                    "processed": source_rows,
-                                    "total": source_rows,
-                                    "unit": "documents",
-                                    "imported": 0,
-                                    "converted_to_pdf": 0,
-                                    "source_rows": source_rows,
-                                    "detail": "dry run — no files written",
-                                    **table_info,
-                                }
-                            )
-                        else:
-                            result = await _migrate_documents(
+                    async with session.begin_nested():
+                        if key == "pathology_units":
+                            result = await _migrate_pathology_units(
                                 session,
                                 mysql,
-                                lookups,
                                 replace_existing,
                                 legacy_table=table,
                                 source_filter=where,
                             )
-                    else:
-                        rows = _fetch_rows(mysql, table, where)
-                        await _emit_progress(
-                            {
-                                "type": "table",
-                                "phase": "writing",
-                                "source_rows": len(rows),
-                                **table_info,
-                            }
-                        )
-                        if dry_run:
-                            result = {
-                                "imported": 0,
-                                "source_rows": len(rows),
-                                "dry_run": True,
-                            }
+                        elif key == "pathology":
+                            result = await _migrate_pathology(
+                                session,
+                                mysql,
+                                replace_existing,
+                                legacy_table=table,
+                                source_filter=where,
+                            )
+                        elif key == "documents":
+                            if dry_run:
+                                source_rows = _count_rows(mysql, table, where)
+                                result = {
+                                    "imported": 0,
+                                    "converted_to_pdf": 0,
+                                    "source_rows": source_rows,
+                                    "dry_run": True,
+                                    "message": (
+                                        f"{source_rows:,} patient history document(s) "
+                                        "would be converted to PDF."
+                                    ),
+                                }
+                                await _emit_progress(
+                                    {
+                                        "type": "rows",
+                                        "activity": "Converting patient history",
+                                        "processed": source_rows,
+                                        "total": source_rows,
+                                        "unit": "documents",
+                                        "imported": 0,
+                                        "converted_to_pdf": 0,
+                                        "source_rows": source_rows,
+                                        "detail": "dry run — no files written",
+                                        **table_info,
+                                    }
+                                )
+                            else:
+                                result = await _migrate_documents(
+                                    session,
+                                    mysql,
+                                    lookups,
+                                    replace_existing,
+                                    legacy_table=table,
+                                    source_filter=where,
+                                )
+                        else:
+                            rows = _fetch_rows(mysql, table, where)
                             await _emit_progress(
                                 {
-                                    "type": "rows",
-                                    "processed": len(rows),
-                                    "total": len(rows),
-                                    "unit": "rows",
-                                    "imported": 0,
+                                    "type": "table",
+                                    "phase": "writing",
                                     "source_rows": len(rows),
                                     **table_info,
                                 }
                             )
-                        elif key == "hospital":
-                            result = await _migrate_hospital(session, rows, replace_existing)
-                        elif key == "doctors":
-                            result = await _migrate_doctors(session, rows, lookups, replace_existing)
-                        elif key == "patients":
-                            result = await _migrate_patients(session, rows, lookups, replace_existing)
-                        elif key == "services":
-                            result = await _migrate_services(session, rows, lookups, replace_existing)
-                        elif key == "opd_ipd_bills":
-                            result = await _migrate_bills(session, rows, lookups, replace_existing)
-                        elif key == "cashbook":
-                            result = await _migrate_cashbook(session, rows, lookups, replace_existing)
-                        elif key == "pathology_ranges":
-                            result = await _migrate_reference_ranges(session, rows)
-                        else:
-                            result = {"imported": 0, "message": f"Unknown mapping key: {key}"}
-                        if "source_rows" not in result:
-                            result["source_rows"] = len(rows)
+                            if dry_run:
+                                result = {
+                                    "imported": 0,
+                                    "source_rows": len(rows),
+                                    "dry_run": True,
+                                }
+                                await _emit_progress(
+                                    {
+                                        "type": "rows",
+                                        "processed": len(rows),
+                                        "total": len(rows),
+                                        "unit": "rows",
+                                        "imported": 0,
+                                        "source_rows": len(rows),
+                                        **table_info,
+                                    }
+                                )
+                            elif key == "hospital":
+                                result = await _migrate_hospital(session, rows, replace_existing)
+                            elif key == "doctors":
+                                result = await _migrate_doctors(session, rows, lookups, replace_existing)
+                            elif key == "patients":
+                                result = await _migrate_patients(session, rows, lookups, replace_existing)
+                            elif key == "services":
+                                result = await _migrate_services(session, rows, lookups, replace_existing)
+                            elif key == "opd_ipd_bills":
+                                result = await _migrate_bills(session, rows, lookups, replace_existing)
+                            elif key == "cashbook":
+                                result = await _migrate_cashbook(session, rows, lookups, replace_existing)
+                            elif key == "pathology_ranges":
+                                result = await _migrate_reference_ranges(session, rows)
+                            else:
+                                result = {"imported": 0, "message": f"Unknown mapping key: {key}"}
+                            if "source_rows" not in result:
+                                result["source_rows"] = len(rows)
                     results[key] = {
                         "ok": True,
                         "label": meta["label"],

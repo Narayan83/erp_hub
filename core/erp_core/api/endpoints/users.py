@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from erp_core.api.deps import get_current_user, get_session
-from erp_core.models.auth import Role, User, UserRoleMapping, UserType
+from erp_core.models.auth import Menu, Role, User, UserRoleMapping, UserType
 from erp_core.product_config import load_product_config
 from erp_core.schemas.user_mgmt import MessageResponse, UserCreate, UserOut, UserUpdate
 from erp_core.security import get_password_hash
@@ -31,6 +31,12 @@ def _to_out(user: User) -> UserOut:
         user_type_id=user.user_type_id,
         user_type_name=user.user_type.name if user.user_type else None,
         is_active=user.is_active,
+        roles=[
+            m.role.role_name
+            for m in (user.role_mappings or [])
+            if m.role and m.role.is_active
+        ],
+        created_at=user.created_at,
         updated_at=user.updated_at,
     )
 
@@ -66,6 +72,13 @@ async def _ids_taken(
 
 async def _grant_super_admin(session: AsyncSession, user_id: str) -> None:
     """Products without a role-mapping screen still need a new user who can sign in."""
+    has_role_screen = (
+        await session.execute(
+            select(Menu.id).where(Menu.code == "user_role_mapping", Menu.is_active.is_(True))
+        )
+    ).scalar_one_or_none()
+    if has_role_screen:
+        return
     role = (
         await session.execute(select(Role).where(Role.role_name == SUPER_ADMIN_ROLE))
     ).scalar_one_or_none()

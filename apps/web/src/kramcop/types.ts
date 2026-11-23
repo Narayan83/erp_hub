@@ -166,6 +166,23 @@ export type SummaryRow = {
   name_kn: string
   balance: number
   share_nos: string
+  share_no: string
+  village_en: string
+  village_kn: string
+  post_en: string
+  post_kn: string
+  taluk_en: string
+  taluk_kn: string
+  district_en: string
+  district_kn: string
+  category: string
+  sex: string
+  mobile: string
+  phone: string
+  share_type_code: number
+  share_type_name: string
+  share_type_prefix: string
+  share_type_label: string
 }
 
 export type LoginResponse = {

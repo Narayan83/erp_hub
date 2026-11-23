@@ -92,8 +92,21 @@ def _ensure_table_widths(html: str) -> str:
 
 
 def prepare_report_html(html: str) -> str:
-    """Apply shared full-page layout rules to any rendered report template."""
-    prepared = _inject_layout_styles(html)
+    """Apply shared full-page layout rules to any rendered report template.
+
+    Designed bill HTML already carries exact @page size and absolute field boxes.
+    Do not wrap it in a page-shell table or override @page margins — that made
+    Print Master / designer changes look like they were ignored at print time.
+    """
+    text = html or ""
+    if (
+        'data-layout-source="designed"' in text
+        or "data-layout-source='designed'" in text
+        or 'class="hms-sheet"' in text
+        or "class='hms-sheet'" in text
+    ):
+        return text
+    prepared = _inject_layout_styles(text)
     wrapped = _wrap_body_content(prepared)
     return _ensure_table_widths(wrapped)
 

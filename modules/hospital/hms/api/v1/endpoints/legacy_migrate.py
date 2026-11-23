@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules.hospital.hms.api.deps import get_session
 from modules.hospital.hms.api.v1.endpoints.admin import CLEAR_DB_PASSWORD, require_admin
-from erp_core.database import AsyncSessionLocal
+from erp_core.database import get_session_factory
 from modules.hospital.hms.models.user import User
 from modules.hospital.hms.services import legacy_migration as mig
 
@@ -197,8 +197,8 @@ async def legacy_migrate_run_stream(
         await queue.put(event)
 
     async def runner() -> None:
-        async with AsyncSessionLocal() as session:
-            try:
+        try:
+            async with get_session_factory()() as session:
                 result = await mig.run_migration(
                     mysql_conn_str=payload.mysql_connection_string,
                     postgres_url=payload.postgres_connection_string,
@@ -210,11 +210,11 @@ async def legacy_migrate_run_stream(
                     progress=progress,
                 )
                 await queue.put({"type": "complete", **result})
-            except Exception as exc:  # noqa: BLE001
-                detail = str(getattr(exc, "orig", exc) or exc)
-                await queue.put({"type": "error", "message": detail})
-            finally:
-                await queue.put(None)
+        except Exception as exc:  # noqa: BLE001
+            detail = str(getattr(exc, "orig", exc) or exc)
+            await queue.put({"type": "error", "message": detail})
+        finally:
+            await queue.put(None)
 
     async def generate():
         task = asyncio.create_task(runner())

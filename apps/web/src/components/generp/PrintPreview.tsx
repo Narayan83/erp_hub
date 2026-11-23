@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { api, ApiError } from '../../api/client'
+import { downloadAuthedPost } from '../../lib/downloadFile'
+import { downloadExcel, type ExcelSheet } from '../../lib/generp/exportExcel'
+import { pageInfoFromHtml } from '../../pages/hospital/billing/paperSize'
 import { BillFormatSelect } from './BillFormatSelect'
 import { BillPreviewFrame } from './BillPreviewFrame'
 import { saveBillFormat } from '../../lib/generp/billFormat'
@@ -59,6 +62,21 @@ function previewKind(html: string): PreviewKind {
   return 'page'
 }
 
+function sheetsFromHtml(html: string): ExcelSheet[] {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const tables = [...doc.querySelectorAll('table')]
+  if (!tables.length) {
+    const text = (doc.body?.innerText || '').trim()
+    return [{ name: 'Document', headers: ['Text'], rows: text ? text.split(/\n+/).map((line) => [line]) : [] }]
+  }
+  return tables.map((table, index) => {
+    const rows = [...table.querySelectorAll('tr')].map((tr) =>
+      [...tr.querySelectorAll('th,td')].map((cell) => cell.textContent?.replace(/\s+/g, ' ').trim() || ''),
+    )
+    return { name: `Sheet ${index + 1}`, headers: rows[0] || [], rows: rows.slice(1) }
+  })
+}
+
 function mmToPx(mm: number) {
   return Math.round((mm / 25.4) * 96)
 }
@@ -113,6 +131,7 @@ export function PrintPreview({
   const kind = previewKind(html)
   const thermal = kind === 'thermal'
   const pageSize = useMemo(() => (kind === 'page' ? pageSizeFromHtml(html) : null), [html, kind])
+  const pageInfo = useMemo(() => (kind === 'page' ? pageInfoFromHtml(html) : null), [html, kind])
   const orientation = useMemo(() => orientationFromHtml(html, kind), [html, kind])
   const start = useMemo(() => defaultWindowBox(), [])
   const [mode, setMode] = useState<WindowMode>('normal')
@@ -132,6 +151,7 @@ export function PrintPreview({
   const [pos, setPos] = useState(() => ({ x: start.x, y: start.y }))
   const [box, setBox] = useState(() => ({ w: start.w, h: start.h }))
   const [busy, setBusy] = useState(false)
+  const [fileBusy, setFileBusy] = useState<'' | 'pdf' | 'excel'>('')
   const [printError, setPrintError] = useState('')
   const [printOk, setPrintOk] = useState('')
   const dragging = useRef<{ dx: number; dy: number } | null>(null)
@@ -142,10 +162,10 @@ export function PrintPreview({
     let cancelled = false
     void (async () => {
       try {
-        const data = await api.get<{ printers?: PrinterInfo[]; default?: string | null }>(
-          '/print-configs/printers',
+        const { loadInstalledPrinters, loadSavedPrinter, matchInstalledPrinter } = await import(
+          '../../lib/printPreferences'
         )
-        const list = data.printers || []
+        const list = await loadInstalledPrinters()
         let chosen = (initialPrinter || '').trim()
         let copiesSaved = 0
         if (reportCode) {
@@ -154,20 +174,14 @@ export function PrintPreview({
               printer_name?: string | null
               copies?: number
             }>(`/print-configs/by-code/${reportCode}`)
-            if (!chosen && cfg.printer_name) chosen = cfg.printer_name.trim()
+            // Empty = Windows default on this PC (same as hospital / core Print Master).
+            if (!chosen) chosen = (cfg.printer_name || '').trim()
             if (showCopies && cfg.copies) copiesSaved = Math.max(1, Number(cfg.copies) || 1)
           } catch {
-            /* ignore */
+            if (!chosen) chosen = await loadSavedPrinter(reportCode)
           }
         }
-        const known = list.some((p) => p.name === chosen)
-        if (!chosen) {
-          const def = list.find((p) => p.is_default) || list[0]
-          chosen = def?.name || ''
-        } else if (list.length > 0 && !known) {
-          const match = list.find((p) => p.name.toLowerCase() === chosen.toLowerCase())
-          if (match) chosen = match.name
-        }
+        chosen = matchInstalledPrinter(chosen, list)
         if (cancelled) return
         setPrinters(list)
         setPrinter(chosen)
@@ -181,7 +195,7 @@ export function PrintPreview({
     return () => {
       cancelled = true
     }
-  }, [reportCode, showCopies])
+  }, [reportCode, showCopies, initialPrinter])
 
   const fitFrame = useCallback(() => {
     if (kind === 'page') return
@@ -200,18 +214,18 @@ export function PrintPreview({
     const selected = printerRef.current.trim()
     try {
       if (onSaveDefault) {
-        if (selected) await onSaveDefault(selected, copies)
+        await onSaveDefault(selected, copies)
         return
       }
       if (!reportCode) return
       if (billFormat) await saveBillFormat(reportCode, billFormat)
-      const rows = await api.get<Array<{ id: string; code: string }>>('/print-configs')
-      const row = rows.find((r) => r.code === reportCode)
-      if (!row) return
-      const payload: { printer_name?: string; copies?: number } = {}
-      if (selected) payload.printer_name = selected
-      if (showCopies) payload.copies = copies
-      await api.patch(`/print-configs/${row.id}`, payload)
+      const { rememberReportPrinter } = await import('../../lib/printPreferences')
+      await rememberReportPrinter(reportCode, selected)
+      if (showCopies) {
+        const rows = await api.get<Array<{ id: string; code: string }>>('/print-configs')
+        const row = rows.find((r) => r.code === reportCode)
+        if (row) await api.patch(`/print-configs/${row.id}`, { copies })
+      }
     } catch {
       /* ignore — printing still works */
     }
@@ -221,10 +235,6 @@ export function PrintPreview({
     const selected = printerRef.current.trim()
     setPrintError('')
     setPrintOk('')
-    if (printers.length > 0 && !selected) {
-      setPrintError('Select a printer first')
-      return
-    }
     setBusy(true)
     try {
       await saveDefault()
@@ -247,6 +257,26 @@ export function PrintPreview({
       setPrintError(err instanceof ApiError ? err.message : 'Print failed')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const exportFile = async (kind: 'pdf' | 'excel') => {
+    const file = (title || 'Document').replace(/\s+/g, '_')
+    setPrintError('')
+    setPrintOk('')
+    setFileBusy(kind)
+    try {
+      if (kind === 'pdf') {
+        await downloadAuthedPost('/print-configs/pdf', { html, title }, `${file}.pdf`)
+        setPrintOk(`Saved ${file}.pdf`)
+      } else {
+        downloadExcel(`${file}.xlsx`, sheetsFromHtml(html))
+        setPrintOk(`Exported ${file}.xlsx`)
+      }
+    } catch (err) {
+      setPrintError(err instanceof Error ? err.message : kind === 'pdf' ? 'PDF download failed' : 'Excel export failed')
+    } finally {
+      setFileBusy('')
     }
   }
 
@@ -329,8 +359,8 @@ export function PrintPreview({
             ✥
           </span>
           <h2>{title}</h2>
-          <span className="print-preview-orientation" data-short={orientation}>
-            Orientation: {orientation}
+          <span className="print-preview-orientation" data-short={pageInfo?.sizeName || orientation}>
+            {pageInfo ? `Selected size: ${pageInfo.label}` : `Orientation: ${orientation}`}
           </span>
           <button
             type="button"
@@ -404,10 +434,10 @@ export function PrintPreview({
                   disabled={!printersReady}
                   onChange={(e) => setPrinter(e.target.value)}
                 >
-                  {printers.length === 0 && <option value="">Windows default</option>}
-                  {printer && !printers.some((p) => p.name === printer) && (
-                    <option value={printer}>{printer} (saved)</option>
-                  )}
+                  <option value="">Windows default printer</option>
+                  {printer && !printers.some((p) => p.name === printer) ? (
+                    <option value={printer}>{printer} (saved / unavailable)</option>
+                  ) : null}
                   {printers.map((p) => (
                     <option key={p.name} value={p.name}>
                       {p.name}
@@ -437,6 +467,12 @@ export function PrintPreview({
               <button type="button" className="btn" onClick={onClose}>
                 Close
               </button>
+              <button type="button" className="btn" disabled={busy || fileBusy !== ''} onClick={() => void exportFile('excel')}>
+                {fileBusy === 'excel' ? 'Exporting…' : 'Excel'}
+              </button>
+              <button type="button" className="btn" disabled={busy || fileBusy !== ''} onClick={() => void exportFile('pdf')}>
+                {fileBusy === 'pdf' ? 'Saving PDF…' : 'Print PDF'}
+              </button>
               {(reportCode || onSaveDefault) && (
                 <button type="button" className="btn" onClick={() => void saveDefault()}>
                   {saveDefaultLabel}
@@ -445,7 +481,7 @@ export function PrintPreview({
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={busy || !printersReady || (printers.length > 0 && !printer)}
+                disabled={busy || fileBusy !== '' || !printersReady || (printers.length > 0 && !printer)}
                 onClick={() => void print()}
               >
                 {busy ? 'Printing…' : 'Print'}

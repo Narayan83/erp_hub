@@ -1,9 +1,23 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { api } from '../api/client'
 import type { Member } from '../types'
 import { AuthImage } from './AuthImage'
 
-export function MemberSnapshot({ member }: { member: Member }) {
+export function MemberSnapshot({ member, allowPhotoUpload = false }: { member: Member; allowPhotoUpload?: boolean }) {
   const [lang, setLang] = useState<'en' | 'kn'>('en')
+  const [hasPhoto, setHasPhoto] = useState(!!member.has_photo)
+  const [hasSign, setHasSign] = useState(!!member.has_sign)
+  const [photoStamp, setPhotoStamp] = useState(0)
+  const [signStamp, setSignStamp] = useState(0)
+  const [uploadError, setUploadError] = useState('')
+
+  useEffect(() => {
+    setHasPhoto(!!member.has_photo)
+    setHasSign(!!member.has_sign)
+    setPhotoStamp(0)
+    setSignStamp(0)
+    setUploadError('')
+  }, [member.id, member.has_photo, member.has_sign])
   const kn = lang === 'kn'
   const name = kn ? member.name_kn || member.name_en : member.name_en || member.name_kn
   const village = kn ? member.village_kn || member.village_en : member.village_en || member.village_kn
@@ -11,6 +25,23 @@ export function MemberSnapshot({ member }: { member: Member }) {
   const taluk = kn ? member.taluk_kn || member.taluk_en : member.taluk_en || member.taluk_kn
   const dist = kn ? member.dist_kn || member.dist_en : member.dist_en || member.dist_kn
   const phone = member.mobile || member.phone || '—'
+
+  const uploadFile = async (kind: 'photo' | 'sign', file: File | undefined) => {
+    if (!file) return
+    setUploadError('')
+    try {
+      await api.upload(`/members/${member.id}/${kind}`, file)
+      if (kind === 'photo') {
+        setHasPhoto(true)
+        setPhotoStamp(Date.now())
+      } else {
+        setHasSign(true)
+        setSignStamp(Date.now())
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed')
+    }
+  }
 
   return (
     <div className="member-snap">
@@ -33,17 +64,34 @@ export function MemberSnapshot({ member }: { member: Member }) {
         </div>
       </div>
       <div className="snap-media">
-        {member.has_photo ? (
-          <AuthImage path={`/members/${member.id}/photo`} alt="Photo" className="snap-photo" />
-        ) : (
-          <div className="photo-ph">Photo</div>
-        )}
-        {member.has_sign ? (
-          <AuthImage path={`/members/${member.id}/sign`} alt="Signature" className="snap-sign" />
-        ) : (
-          <div className="photo-ph sign">Sign</div>
-        )}
+        <div className="snap-slot">
+          {hasPhoto ? (
+            <AuthImage key={`p-${member.id}-${photoStamp}`} path={`/members/${member.id}/photo`} alt="Photo" className="snap-photo" />
+          ) : (
+            <div className="photo-ph">Photo</div>
+          )}
+          {allowPhotoUpload && (
+            <label className="snap-upload">
+              Upload photo
+              <input type="file" accept="image/*" onChange={(e) => void uploadFile('photo', e.target.files?.[0])} />
+            </label>
+          )}
+        </div>
+        <div className="snap-slot">
+          {hasSign ? (
+            <AuthImage key={`s-${member.id}-${signStamp}`} path={`/members/${member.id}/sign`} alt="Signature" className="snap-sign" />
+          ) : (
+            <div className="photo-ph sign">Sign</div>
+          )}
+          {allowPhotoUpload && (
+            <label className="snap-upload">
+              Upload sign
+              <input type="file" accept="image/*" onChange={(e) => void uploadFile('sign', e.target.files?.[0])} />
+            </label>
+          )}
+        </div>
       </div>
+      {uploadError && <div className="snap-upload-error">{uploadError}</div>}
     </div>
   )
 }

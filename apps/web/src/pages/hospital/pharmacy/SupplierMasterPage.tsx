@@ -22,7 +22,7 @@ export function SupplierMasterPage() {
       listPath="/hospital/pharmacy/suppliers"
       defaults={{ sort_order: 0, is_active: true }}
       fields={[
-        { key: 'code', label: 'Code', readOnlyAlways: true, placeholder: 'Auto' },
+        { key: 'code', label: 'Code', placeholder: 'Auto', readOnlyOnModify: true },
         { key: 'name', label: 'Supplier Name', required: true },
         { key: 'contact_person', label: 'Contact Person' },
         { key: 'phone', label: 'Phone' },
@@ -31,7 +31,11 @@ export function SupplierMasterPage() {
         { key: 'sort_order', label: 'Sort Order', type: 'number' },
         { key: 'address', label: 'Address', type: 'textarea' },
       ]}
-      mapCreate={(f) => ({ ...body(f), is_active: true })}
+      mapCreate={(f) => ({
+        ...body(f),
+        code: String(f.code ?? '').trim() || null,
+        is_active: true,
+      })}
       mapUpdate={body}
       columns={[
         { key: 'code', label: 'Code' },

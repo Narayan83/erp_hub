@@ -11,7 +11,7 @@ from modules.hospital.hms.models.patient_service_master import PatientServiceMas
 from modules.hospital.hms.models.pathology_bill import PathologyBill, PathologyBillLine
 from modules.hospital.hms.models.pathology_service_member import PathologyServiceMember
 from modules.hospital.hms.models.pathology_unit import PathologyUnit
-from modules.hospital.hms.models.service_category import ServiceCategory
+from modules.hospital.hms.models.service_group import ServiceGroup
 from modules.hospital.hms.repositories.pathology_bill import PathologyBillRepository
 from modules.hospital.hms.repositories.pathology_masters import (
     PathologyNormalRangeRepository,
@@ -268,14 +268,14 @@ class PathologyBillService:
     ) -> list[BillingServiceCatalogItem]:
         stmt = (
             select(PatientServiceMaster)
-            .join(ServiceCategory, PatientServiceMaster.category_id == ServiceCategory.id)
+            .join(ServiceGroup, PatientServiceMaster.group_id == ServiceGroup.id)
             .options(
-                selectinload(PatientServiceMaster.category),
+                selectinload(PatientServiceMaster.group),
                 selectinload(PatientServiceMaster.sub_category),
             )
             .where(PatientServiceMaster.is_active.is_(True))
             .where(PatientServiceMaster.is_service_active.is_(True))
-            .where(ServiceCategory.code == self.LAB_CATEGORY_CODE)
+            .where(ServiceGroup.code == self.LAB_CATEGORY_CODE)
         )
         if sub_category_id:
             stmt = stmt.where(PatientServiceMaster.sub_category_id == sub_category_id)
@@ -295,8 +295,8 @@ class PathologyBillService:
                     name=row.name,
                     rate=row.rate,
                     service_charge=row.service_charge,
-                    category_id=row.category_id,
-                    category_name=row.category.name if row.category else None,
+                    group_id=row.group_id,
+                    group_name=row.group.name if row.group else None,
                     sub_category_id=row.sub_category_id,
                     sub_category_name=row.sub_category.name if row.sub_category else None,
                 )
@@ -387,7 +387,7 @@ class PathologyBillService:
                     service_id=service.id,
                     service_code=service.code,
                     service_name=line_name,
-                    category_name=service.category.name if service.category else None,
+                    category_name=service.group.name if service.group else None,
                     sub_category_name=service.sub_category.name if service.sub_category else None,
                     rate=rate,
                     quantity=entry.quantity,

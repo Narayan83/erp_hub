@@ -4,10 +4,12 @@ import { useAuth } from '../auth/AuthContext'
 import { MenuOverlayProvider } from './generp/MenuOverlay'
 import Sidebar from './Sidebar'
 import { HospitalShortcutBar } from '../pages/hospital/HospitalShortcutBar'
+import { HospitalPrintPreviewHost } from '../pages/hospital/billing/HospitalPrintPreview'
 
 export function AppLayout() {
   const { code } = useParams()
   const { user, menus, product, displayName, logout } = useAuth()
+  const isHospital = (product || '').toLowerCase() === 'hospital'
 
   useEffect(() => {
     if (product === 'generp') void import('../generp.css')
@@ -27,8 +29,10 @@ export function AppLayout() {
           onLogout={logout}
         />
         <main className="erp-main">
-          {product === 'hospital' ? <HospitalShortcutBar /> : null}
+          {/* Popup shortcuts are hospital UI; print preview host is shared for any product. */}
+          {isHospital ? <HospitalShortcutBar /> : null}
           <Outlet />
+          <HospitalPrintPreviewHost />
         </main>
       </div>
     </MenuOverlayProvider>

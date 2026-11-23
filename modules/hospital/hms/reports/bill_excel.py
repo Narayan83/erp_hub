@@ -89,7 +89,7 @@ def build_bill_excel(context: dict[str, Any]) -> bytes:
     row += 1
     ws.cell(row=row, column=1, value="Service Details").font = section_font
     row += 1
-    line_headers = ["#", "Code", "Description", "Category", "Rate", "Qty", "Amount"]
+    line_headers = ["#", "Code", "Description", "Service Group", "Rate", "Qty", "Amount"]
     for col, heading in enumerate(line_headers, start=1):
         cell = ws.cell(row=row, column=col, value=heading)
         cell.font = Font(bold=True)

@@ -21,7 +21,7 @@ class ServiceSubCategory(Base, TimestampMixin):
     )
     category_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False),
-        ForeignKey("service_categories.id"),
+        ForeignKey("service_groups.id"),
         nullable=False,
         index=True,
     )
@@ -30,4 +30,4 @@ class ServiceSubCategory(Base, TimestampMixin):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    category: Mapped["ServiceCategory"] = relationship("ServiceCategory")
+    category: Mapped["ServiceGroup"] = relationship("ServiceGroup")

@@ -18,6 +18,8 @@ MENUS: list[tuple[str, str, str | None, int]] = [
     ("cf_vendor_master", "Vendor Master", "cf_masters", 6),
     ("cf_ledger_master", "Ledger Master", "cf_masters", 7),
     ("cf_payment_mode_master", "Payment Modes", "cf_masters", 8),
+    ("print_master", "Print Master", "cf_masters", 9),
+    ("print_template_designer", "Bill Template Designer", "cf_masters", 10),
     # Reports
     ("cf_report_summary", "Project Summary", "cf_reports", 1),
     ("cf_report_ledger", "Ledger Report", "cf_reports", 2),

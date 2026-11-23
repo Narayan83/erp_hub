@@ -82,6 +82,73 @@ async def balances_by_acno(
     return out
 
 
+def share_type_code_for_txn(
+    typ: int | None,
+    astyp: str | None,
+    *,
+    legacy_to_code: dict[int, int],
+    prefix_to_code: dict[str, int],
+    known_codes: set[int],
+) -> int:
+    if typ is not None:
+        if typ in legacy_to_code:
+            return legacy_to_code[typ]
+        if typ in known_codes:
+            return int(typ)
+    token = (astyp or "").strip().upper()
+    if token in prefix_to_code:
+        return prefix_to_code[token]
+    if token.isdigit():
+        number = int(token)
+        if number in legacy_to_code:
+            return legacy_to_code[number]
+        if number in known_codes:
+            return number
+    return 0
+
+
+async def balances_by_acno_share_type(
+    session: AsyncSession,
+    as_on: date | None,
+    *,
+    legacy_to_code: dict[int, int],
+    prefix_to_code: dict[str, int],
+    known_codes: set[int],
+) -> dict[tuple[int, int], tuple[float, float, float, list[str]]]:
+    """Share balance split by kc_share_types, using transaction typ / astyp."""
+    stmt = select(
+        Transaction.acno,
+        Transaction.rno,
+        Transaction.kind,
+        Transaction.amount,
+        Transaction.txn_date,
+        Transaction.created_at,
+        Transaction.typ,
+        Transaction.astyp,
+    ).where(Transaction.kind.in_([SHARE_ADD, SHARE_DEL]))
+    if as_on is not None:
+        stmt = stmt.where((Transaction.txn_date.is_(None)) | (Transaction.txn_date <= as_on))
+    stmt = stmt.order_by(Transaction.txn_date.asc().nullsfirst(), Transaction.created_at.asc())
+    held: dict[tuple[int, int], list[str]] = defaultdict(list)
+    amounts: dict[tuple[int, int], list[float]] = defaultdict(lambda: [0.0, 0.0])
+    for acno, rno, kind, amount, _d, _c, typ, astyp in (await session.execute(stmt)).all():
+        code = share_type_code_for_txn(
+            typ,
+            astyp,
+            legacy_to_code=legacy_to_code,
+            prefix_to_code=prefix_to_code,
+            known_codes=known_codes,
+        )
+        if not code:
+            continue
+        _apply(held, amounts, (int(acno), code), rno, kind, amount)
+    out: dict[tuple[int, int], tuple[float, float, float, list[str]]] = {}
+    for key in set(held) | set(amounts):
+        add, delete = amounts[key]
+        out[key] = (add, delete, add - delete, list(held.get(key, [])))
+    return out
+
+
 async def account_totals(session: AsyncSession, acno: int, as_on: date | None = None):
     data = await balances_by_acno(session, [acno], as_on)
     return data.get(acno, (0.0, 0.0, 0.0, []))

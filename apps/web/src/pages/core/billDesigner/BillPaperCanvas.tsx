@@ -248,10 +248,15 @@ export const BillPaperCanvas = forwardRef<CanvasHandle, Props>(function BillPape
     sample.hospital_email = 'billing@example.com'
     sample.hospital_website = 'www.example.com'
     sample.hospital_software_id = ''
+    sample.patient_no = 'C00021'
     sample.patient_name = `Sample ${labels.party || 'Party'}`
     sample.doctor_name = ''
     sample.referring_doctor = ''
     sample.department_name = ''
+    sample.lines = [
+      { sr: '1', code: 'ITM1', name: 'Sample Item 1', category: 'General', rate: '500.00', qty: '1', amount: '500.00' },
+      { sr: '2', code: 'ITM2', name: 'Sample Item 2', category: 'General', rate: '350.00', qty: '1', amount: '350.00' },
+    ]
   }
   const lineCount = Math.min(3, SAMPLE.lines.length)
   const ctx: LayoutCtx = {

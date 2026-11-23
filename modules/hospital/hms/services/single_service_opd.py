@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from erp_core.product_config import get_product_name
 from modules.hospital.hms.models.doctor import Doctor
 from modules.hospital.hms.models.menu import Menu
 from modules.hospital.hms.models.patient_service_master import PatientServiceMaster
@@ -33,6 +34,7 @@ from modules.hospital.hms.schemas.single_service_opd import (
     SingleServiceOpdOptionRead,
     SingleServiceOpdOptionServiceRead,
     SingleServiceOpdOptionUpdate,
+    SingleServiceOpdUnlinkedMenuRead,
 )
 from modules.hospital.hms.services.bill_number import BillNumberService
 
@@ -138,6 +140,7 @@ class SingleServiceOpdService:
             doctor_id=item.doctor_id,
             doctor_name=item.doctor.full_name if item.doctor else None,
             use_patient_id=item.use_patient_id,
+            services_start_unselected=bool(item.services_start_unselected),
             default_rate=Decimal(str(item.default_rate or 0)),
             bill_prefix=item.bill_prefix,
             sort_order=item.sort_order,
@@ -191,17 +194,70 @@ class SingleServiceOpdService:
         )
 
     async def list_options(self) -> list[SingleServiceOpdOptionRead]:
+        await self.ensure_option_menus()
         items = await self.option_repo.list_all()
         return [self._option_to_read(item) for item in items]
 
+    async def ensure_option_menus(self) -> None:
+        """Create or repair the Billing submenu for every saved option.
+
+        Options can exist without a menu row (older saves, or a startup seed that
+        turned generated menus off). Each active option must be a child of Billing.
+        """
+        items = await self.option_repo.list_all()
+        for item in items:
+            await self._sync_menu(item, grant_permissions=True)
+
+    async def list_unlinked_menus(self) -> list[SingleServiceOpdUnlinkedMenuRead]:
+        """Billing menus left behind with no option row, so the bill screen cannot open."""
+        linked = set(
+            (
+                await self.session.execute(select(SingleServiceOpdOption.menu_code))
+            ).scalars().all()
+        )
+        result = await self.session.execute(
+            select(Menu)
+            .where(Menu.code.startswith(MENU_CODE_PREFIX), Menu.is_active.is_(True))
+            .order_by(Menu.sort_order, Menu.label)
+        )
+        rows: list[SingleServiceOpdUnlinkedMenuRead] = []
+        for menu in result.scalars().all():
+            if menu.code in linked:
+                continue
+            rows.append(
+                SingleServiceOpdUnlinkedMenuRead(
+                    menu_code=menu.code,
+                    name=menu.label,
+                    sort_order=int(menu.sort_order or 0),
+                )
+            )
+        return rows
+
     async def get_option_by_menu(self, menu_code: str) -> SingleServiceOpdOptionRead:
         item = await self.option_repo.get_by_menu_code(menu_code)
-        if not item:
+        if item:
+            return self._option_to_read(item)
+        any_item = await self.option_repo.get_by_menu(menu_code)
+        if any_item is not None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="This billing option is not set up or is inactive.",
+                detail="This billing option is inactive. Turn Active on in Single Service OPD Setup.",
             )
-        return self._option_to_read(item)
+        menu = (
+            await self.session.execute(select(Menu).where(Menu.code == menu_code))
+        ).scalar_one_or_none()
+        if menu is not None and (menu.code or "").startswith(MENU_CODE_PREFIX):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    "This billing menu has no setup in this software. "
+                    "Open Single Service OPD Setup, select it, and save to activate it."
+                ),
+            )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This billing option is not set up or is inactive.",
+        )
 
     async def create_option(self, data: SingleServiceOpdOptionCreate) -> SingleServiceOpdOptionRead:
         name = data.name.strip()
@@ -211,7 +267,7 @@ class SingleServiceOpdService:
         primary = masters[0]
         doctor = await self._require_doctor(data.doctor_id)
         prefix = await self._unique_prefix(data.bill_prefix or suggest_prefix(name))
-        menu_code = await self._unique_menu_code(suggest_menu_code(name))
+        menu_code = await self._menu_code_for_create(name, data.menu_code)
         item = SingleServiceOpdOption(
             name=name,
             menu_code=menu_code,
@@ -219,6 +275,7 @@ class SingleServiceOpdService:
             service_name=primary.name,
             doctor_id=doctor.id,
             use_patient_id=data.use_patient_id,
+            services_start_unselected=data.services_start_unselected,
             default_rate=float(data.default_rate),
             bill_prefix=prefix,
             sort_order=await self.option_repo.next_sort_order(),
@@ -256,6 +313,8 @@ class SingleServiceOpdService:
             item.doctor_id = doctor.id
         if "use_patient_id" in payload and payload["use_patient_id"] is not None:
             item.use_patient_id = payload["use_patient_id"]
+        if "services_start_unselected" in payload and payload["services_start_unselected"] is not None:
+            item.services_start_unselected = payload["services_start_unselected"]
         if "default_rate" in payload and payload["default_rate"] is not None:
             item.default_rate = float(payload["default_rate"])
         if "bill_prefix" in payload and payload["bill_prefix"]:
@@ -734,13 +793,42 @@ class SingleServiceOpdService:
         self._validate_prefix(candidate)
         return candidate
 
+    async def _menu_code_for_create(self, name: str, requested: str | None) -> str:
+        """Bind a new option to an existing sidebar menu when that menu has no setup row."""
+        if requested and requested.strip():
+            code = requested.strip().lower()[:80]
+            if not code.startswith(MENU_CODE_PREFIX):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Menu code must belong to a Single Service OPD menu",
+                )
+            if await self.option_repo.get_by_menu(code):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="That menu is already used by another billing option",
+                )
+            menu = (
+                await self.session.execute(select(Menu).where(Menu.code == code))
+            ).scalar_one_or_none()
+            if menu is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Billing menu not found",
+                )
+            return code
+        return await self._unique_menu_code(suggest_menu_code(name))
+
     async def _unique_menu_code(self, menu_code: str) -> str:
         candidate = menu_code[:80]
         suffix = 2
         while True:
             taken_option = await self.option_repo.get_by_menu(candidate)
             menu_result = await self.session.execute(select(Menu).where(Menu.code == candidate))
-            if taken_option is None and menu_result.scalar_one_or_none() is None:
+            menu = menu_result.scalar_one_or_none()
+            # A menu left behind by the other software (or a cleared setup) can be reused.
+            if taken_option is None and (
+                menu is None or (menu.code or "").startswith(MENU_CODE_PREFIX)
+            ):
                 return candidate
             tail = f"_{suffix}"
             candidate = f"{menu_code[: 80 - len(tail)]}{tail}"
@@ -762,18 +850,22 @@ class SingleServiceOpdService:
                 label=option.name,
                 parent_id=parent.id,
                 sort_order=100 + option.sort_order,
+                legacy_form="SSO",
+                module=get_product_name(),
                 is_active=option.is_active,
             )
             self.session.add(menu)
             await self.session.flush()
-            if grant_permissions:
-                await self._copy_opd_permissions(menu.id)
         else:
             menu.label = option.name
             menu.parent_id = parent.id
             menu.sort_order = 100 + option.sort_order
+            menu.legacy_form = menu.legacy_form or "SSO"
+            menu.module = get_product_name()
             menu.is_active = option.is_active
-        await self.session.flush()
+            await self.session.flush()
+        if grant_permissions:
+            await self._copy_opd_permissions(menu.id)
 
     async def _set_generated_menu_active(self, menu_code: str, active: bool) -> None:
         if not (menu_code or "").startswith(MENU_CODE_PREFIX):
@@ -803,7 +895,13 @@ class SingleServiceOpdService:
         perm_result = await self.session.execute(
             select(RoleMenuPermission).where(RoleMenuPermission.menu_id == opd.id)
         )
+        existing_result = await self.session.execute(
+            select(RoleMenuPermission.role_id).where(RoleMenuPermission.menu_id == menu_id)
+        )
+        already = set(existing_result.scalars().all())
         for perm in perm_result.scalars().all():
+            if perm.role_id in already:
+                continue
             self.session.add(
                 RoleMenuPermission(
                     role_id=perm.role_id,

@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 block_cipher = None
 
@@ -28,11 +28,23 @@ PRODUCT_MODULES = {
     "contract_farming": "modules.contract_farming",
 }
 PRODUCT_DATA = {
-    "hospital": ("modules/hospital/data", "modules/hospital/data"),
-    "generp": ("modules/generp/data", "modules/generp/data"),
-    "lodge": ("modules/lodge/data", "modules/lodge/data"),
-    "kramcop": ("modules/kramcop/data", "modules/kramcop/data"),
-    "contract_farming": ("modules/contract_farming/data", "modules/contract_farming/data"),
+    "hospital": [
+        ("modules/hospital/data", "modules/hospital/data"),
+        ("modules/hospital/hms/reports/templates", "modules/hospital/hms/reports/templates"),
+    ],
+    "generp": [
+        ("modules/generp/data", "modules/generp/data"),
+        ("modules/generp/ge/reports/templates", "modules/generp/ge/reports/templates"),
+    ],
+    "lodge": [
+        ("modules/lodge/data", "modules/lodge/data"),
+    ],
+    "kramcop": [
+        ("modules/kramcop/data", "modules/kramcop/data"),
+    ],
+    "contract_farming": [
+        ("modules/contract_farming/data", "modules/contract_farming/data"),
+    ],
 }
 
 if PRODUCT not in PRODUCT_EXE:
@@ -60,10 +72,26 @@ datas = [
     (str(WEB_DIST), "web"),
     (str(PRODUCTS), "config/products"),
 ]
-data_src_rel, data_dest = PRODUCT_DATA[PRODUCT]
-data_src = ROOT / data_src_rel
-if data_src.is_dir():
-    datas.append((str(data_src), data_dest))
+for data_src_rel, data_dest in PRODUCT_DATA[PRODUCT]:
+    data_src = ROOT / data_src_rel
+    if data_src.is_dir():
+        datas.append((str(data_src), data_dest))
+
+binaries: list = []
+_pdfium_hidden: list[str] = []
+
+if PRODUCT in ("hospital", "generp"):
+    datas += collect_data_files("reportlab")
+    datas += collect_data_files("xhtml2pdf")
+    # Direct print: Chromium --print-to-pdf + pypdfium2 rasterize (needs pdfium.dll).
+    for pkg in ("pypdfium2", "pypdfium2_raw"):
+        try:
+            pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
+        except Exception:
+            continue
+        datas += pkg_datas
+        binaries += pkg_binaries
+        _pdfium_hidden += list(pkg_hidden)
 
 hiddenimports = [
     "app.main",
@@ -90,12 +118,15 @@ hiddenimports = [
     "bcrypt",
     "openpyxl",
     "multipart",
+    "pypdfium2",
+    "pypdfium2_raw",
+    *_pdfium_hidden,
 ]
 
 a = Analysis(
     [str(API / "run_server.py")],
     pathex=[str(API), str(CORE), str(ROOT)],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

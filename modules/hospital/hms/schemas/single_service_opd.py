@@ -19,8 +19,10 @@ class SingleServiceOpdOptionCreate(BaseModel):
     service_ids: list[str] | None = None
     doctor_id: str
     use_patient_id: bool = False
+    services_start_unselected: bool = False
     default_rate: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=2)
     bill_prefix: str | None = Field(None, max_length=10)
+    menu_code: str | None = Field(None, max_length=80)
     is_active: bool = True
 
     @field_validator("name", "bill_prefix", mode="before")
@@ -54,6 +56,7 @@ class SingleServiceOpdOptionUpdate(BaseModel):
     service_ids: list[str] | None = None
     doctor_id: str | None = None
     use_patient_id: bool | None = None
+    services_start_unselected: bool | None = None
     default_rate: Decimal | None = Field(None, ge=0, decimal_places=2)
     bill_prefix: str | None = Field(None, max_length=10)
     sort_order: int | None = Field(None, ge=0)
@@ -86,6 +89,14 @@ class SingleServiceOpdOptionUpdate(BaseModel):
         return self
 
 
+class SingleServiceOpdUnlinkedMenuRead(BaseModel):
+    """Sidebar billing menu that has no setup row in this software."""
+
+    menu_code: str
+    name: str
+    sort_order: int
+
+
 class SingleServiceOpdOptionRead(BaseModel):
     id: str
     name: str
@@ -96,6 +107,7 @@ class SingleServiceOpdOptionRead(BaseModel):
     doctor_id: str | None = None
     doctor_name: str | None = None
     use_patient_id: bool
+    services_start_unselected: bool = False
     default_rate: Decimal
     bill_prefix: str
     sort_order: int

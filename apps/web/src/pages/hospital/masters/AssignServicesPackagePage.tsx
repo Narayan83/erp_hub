@@ -15,7 +15,7 @@ type Item = {
   rate_override?: number | string | null
 }
 type PkgDetail = Pkg & { items: Item[] }
-type Service = { id: string; code: string; name: string; rate: number | string; category_name?: string | null }
+type Service = { id: string; code: string; name: string; rate: number | string; group_name?: string | null }
 
 /** Assign Services To Package — /hospital/billing-packages/{id}/items */
 export function AssignServicesPackagePage() {

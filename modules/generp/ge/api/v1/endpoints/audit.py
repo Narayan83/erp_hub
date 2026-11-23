@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from erp_core.product_config import enabled_modules
 from modules.generp.ge.api.deps import get_current_user, get_session
 from modules.generp.ge.models.audit import AuditLog
 from modules.generp.ge.models.auth import Menu, User
@@ -64,7 +65,13 @@ async def audit_filters(
         .all()
     )
     db_menus = list(
-        (await session.execute(select(Menu).where(Menu.is_active.is_(True)).order_by(Menu.label)))
+        (
+            await session.execute(
+                select(Menu)
+                .where(Menu.is_active.is_(True), Menu.module.in_(enabled_modules()))
+                .order_by(Menu.label)
+            )
+        )
         .scalars()
         .all()
     )

@@ -35,7 +35,7 @@ export function CodeNameMasterPage({
         ...((extraCreateFields || {}) as Record<string, string | number | boolean>),
       }}
       fields={[
-        { key: codeKey, label: 'Code', required: true },
+        { key: codeKey, label: 'Code', placeholder: 'Auto', readOnlyOnModify: true },
         { key: nameKey, label: 'Name', required: true },
       ]}
       columns={
@@ -45,7 +45,7 @@ export function CodeNameMasterPage({
         ]
       }
       mapCreate={(form) => ({
-        [codeKey]: form[codeKey],
+        [codeKey]: String(form[codeKey] ?? '').trim() || null,
         [nameKey]: form[nameKey],
         ...(extraCreateFields || {}),
       })}

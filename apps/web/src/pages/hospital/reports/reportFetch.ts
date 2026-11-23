@@ -1,3 +1,5 @@
+import { openPrintPreview } from '../../../print/printPreviewBus'
+
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') || '/api/v1'
 
 export async function fetchReportHtml(
@@ -29,12 +31,13 @@ export async function fetchReportHtml(
 }
 
 export function openHtmlPreview(html: string, title = 'Report') {
-  const w = window.open('', '_blank')
-  if (!w) throw new Error('Popup blocked — allow popups to preview reports')
-  w.document.open()
-  w.document.write(html)
-  w.document.close()
-  w.document.title = title
+  const file = title.replace(/\s+/g, '_')
+  openPrintPreview({
+    title,
+    html,
+    pdfName: `${file}.pdf`,
+    excelName: `${file}.xlsx`,
+  })
 }
 
 export function todayIso() {
