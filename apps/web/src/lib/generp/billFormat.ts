@@ -1,8 +1,7 @@
-import { api } from '../../api/client'
-
 export const BILL_FORMATS = [
-  { code: 'A4', name: 'A4 Standard' },
+  { code: 'A4', name: 'A4' },
   { code: 'A5', name: 'A5' },
+  { code: 'A6', name: 'A6' },
   { code: 'THERMAL_80', name: 'Thermal 80mm' },
   { code: 'THERMAL_58', name: 'Thermal 58mm' },
 ] as const
@@ -55,28 +54,15 @@ export function writeLocalBillFormat(reportCode: string, format: string): void {
   }
 }
 
+/** Paper format for this browser only. It is not written to the server. */
 export async function loadBillFormat(reportCode: string): Promise<string> {
-  const local = readLocalBillFormat(reportCode)
-  try {
-    const cfg = await api.get<{ bill_format?: string }>(`/print-configs/by-code/${reportCode}`)
-    const fmt = normalizeBillFormat(cfg.bill_format || local)
-    writeLocalBillFormat(reportCode, fmt)
-    return fmt
-  } catch {
-    return local
-  }
+  return readLocalBillFormat(reportCode)
 }
 
+/** Paper format for this browser only. It is not written to the server. */
 export async function saveBillFormat(reportCode: string, format: string): Promise<string> {
   const fmt = normalizeBillFormat(format)
   writeLocalBillFormat(reportCode, fmt)
-  try {
-    const rows = await api.get<Array<{ id: string; code: string }>>('/print-configs')
-    const row = rows.find((r) => r.code === reportCode)
-    if (row) await api.patch(`/print-configs/${row.id}`, { bill_format: fmt })
-  } catch {
-    /* local default still applies on this browser */
-  }
   return fmt
 }
 

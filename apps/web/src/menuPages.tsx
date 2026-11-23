@@ -292,6 +292,8 @@ const CORE_CODES = new Set([
 ])
 
 export function renderMenuPage(code: string, product = '') {
+  const menuCode = code.trim().toLowerCase().replace(/[\s-]+/g, '_')
+  if (menuCode === 'print_template_designer') return <BillTemplateDesignerPage />
   if (product === 'generp') return renderGenerpMenuPage(code)
   if (product === 'kramcop') {
     const page = renderKramcopMenuPage(code)

@@ -7,7 +7,6 @@ import { SaleBillModifyPage, SaleBillReprintPage, WholesaleBillModifyPage, Whole
 import { SaleBillPage, WHOLESALE_BILL_MODE } from './SaleBillPage'
 import { BarcodeGenerationPage } from './BarcodeGenerationPage'
 import { PrintMasterPage } from './PrintMasterPage'
-import { PrintTemplateDesignerPage } from './PrintTemplateDesignerPage'
 import { CompanyProfilePage } from './CompanyProfilePage'
 import { DailyCollectionReportPage } from './DailyCollectionReportPage'
 import { TaxwiseBillSummaryPage, TaxwiseSummaryPage } from './TaxwiseReportPage'
@@ -108,9 +107,6 @@ export function renderGenerpMenuPage(raw: string): ReactNode {
       break
     case 'print_master':
       page = <PrintMasterPage />
-      break
-    case 'print_template_designer':
-      page = <PrintTemplateDesignerPage />
       break
     case 'company_profile':
       page = <CompanyProfilePage />

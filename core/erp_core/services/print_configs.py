@@ -8,14 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.models.auth import Menu
 from erp_core.models.masters import PrintConfig
-from erp_core.printing.layouts import (
-    DOCUMENT_NAMES,
-    KIND_BILL,
-    _BILL_CODES,
-    single_service_option_layout_code,
-)
-from erp_core.product_config import enabled_modules, get_product_name, module_enabled
-from erp_core.printing.local import get_report_printer, set_report_printer
+from erp_core.printing.layouts import KIND_BILL
+from erp_core.product_config import enabled_modules, module_enabled
 from erp_core.repositories.print_configs import PrintConfigRepository
 from erp_core.schemas.print_configs import PrintConfigCreate, PrintConfigRead, PrintConfigUpdate
 
@@ -23,11 +17,9 @@ _EXCLUDED_MENU_CODES = frozenset({"print_master", "print_template_designer"})
 
 
 def _with_local_printer(item: PrintConfig) -> PrintConfigRead:
-    """Overlay this PC's print.ini printer; blank means Windows default."""
+    """Page settings stay on the product. The counter's printer is its own print dialog."""
     data = PrintConfigRead.model_validate(item)
-    local = get_report_printer(item.code)
-    # Never fall back to the shared DB printer — that would couple stations.
-    return data.model_copy(update={"printer_name": local})
+    return data.model_copy(update={"printer_name": None})
 
 
 class PrintConfigService:
@@ -134,58 +126,10 @@ class PrintConfigService:
         return ordered
 
     async def product_documents(self) -> list[dict[str, str]]:
-        """Documents available in Bill Template Designer for the active product only.
-
-        - Hospital keeps its fixed bill/report codes + active single-service options,
-          followed by every remaining active hospital menu.
-        - All other products load every active menu of that product (no hospital items).
-        - Active PrintConfig rows created in Print Master for this product are included too.
-        """
-        product = self.repo.product
+        """Designer menu list: active menus of the running product only."""
         docs: list[dict[str, str]] = []
         seen_codes: set[str] = set()
-        covered_sso_menu_codes: set[str] = set()
-
-        if product == "hospital" and module_enabled("hospital"):
-            for code, name in DOCUMENT_NAMES.items():
-                docs.append(
-                    {
-                        "code": code,
-                        "name": name,
-                        "kind": KIND_BILL if code in _BILL_CODES else "report",
-                    }
-                )
-                seen_codes.add(code)
-
-            sso_extra: list[dict[str, str]] = []
-            for option_id, name, menu_code in await self.single_service_option_details():
-                label = (name or "").strip()
-                if not label:
-                    continue
-                try:
-                    sso_code = single_service_option_layout_code(option_id)
-                except ValueError:
-                    continue
-                if sso_code in seen_codes:
-                    continue
-                sso_extra.append({"code": sso_code, "name": label, "kind": KIND_BILL})
-                seen_codes.add(sso_code)
-                if menu_code:
-                    covered_sso_menu_codes.add(menu_code.strip().lower())
-            if sso_extra:
-                insert_at = next(
-                    (
-                        idx + 1
-                        for idx, doc in enumerate(docs)
-                        if doc["code"] == "SINGLE_SERVICE_OPD"
-                    ),
-                    len(docs),
-                )
-                docs[insert_at:insert_at] = sso_extra
-
         for menu_code, menu_label in await self.active_product_menus():
-            if menu_code.lower() in covered_sso_menu_codes:
-                continue
             doc_code = menu_code.upper()
             if doc_code in seen_codes:
                 continue
@@ -198,20 +142,6 @@ class PrintConfigService:
                 }
             )
             seen_codes.add(doc_code)
-
-        for cfg in await self.repo.list_active():
-            doc_code = (cfg.code or "").strip().upper()
-            if not doc_code or doc_code in seen_codes:
-                continue
-            docs.append(
-                {
-                    "code": doc_code,
-                    "name": (cfg.name or doc_code).strip(),
-                    "kind": KIND_BILL,
-                }
-            )
-            seen_codes.add(doc_code)
-
         return docs
 
     async def resolve_document(self, code: str) -> tuple[str, str] | None:
@@ -268,7 +198,6 @@ class PrintConfigService:
                 )
             self._apply_create_fields(existing, data)
             existing.is_active = True
-            set_report_printer(code, data.printer_name)
             await self.repo.session.flush()
             await self.repo.session.refresh(existing)
             return _with_local_printer(existing)
@@ -293,7 +222,6 @@ class PrintConfigService:
             is_active=True,
         )
         self.repo.session.add(item)
-        set_report_printer(code, data.printer_name)
         await self.repo.session.flush()
         await self.repo.session.refresh(item)
         return _with_local_printer(item)
@@ -303,16 +231,12 @@ class PrintConfigService:
         if not item or not item.is_active:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Print config not found")
         payload = data.model_dump(exclude_unset=True)
-        printer_set = "printer_name" in payload
-        printer_name = payload.pop("printer_name", None) if printer_set else None
+        payload.pop("printer_name", None)
         for field, value in payload.items():
             if field == "name" and value is not None:
                 value = value.strip()
             setattr(item, field, value)
-        if printer_set:
-            set_report_printer(item.code, printer_name)
-            # Keep DB column empty so other workstations are not forced to this printer.
-            item.printer_name = None
+        item.printer_name = None
         if item.paper_size == "CUSTOM" and (not item.custom_width_mm or not item.custom_height_mm):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

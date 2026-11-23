@@ -1,3 +1,5 @@
+from modules.generp.ge.services.party_codes import series_slot
+from modules.generp.ge.services.stock_barcodes import label_copies
 from modules.generp.ge.services.product_codes import (
     allocate_import_codes,
     encode_own_barcode,
@@ -14,6 +16,24 @@ def test_encode_own_barcode_rupees():
     assert encode_own_barcode(1, 199) == "000001000199"
     assert encode_own_barcode("42", 199.4) == "000042000199"
     assert encode_own_barcode(7, 10000) == "000007010000"
+
+
+def test_series_slot_ignores_codes_past_the_limit():
+    assert series_slot("12") == 12
+    assert series_slot("CUST12") == 12
+    assert series_slot("VEND7") == 7
+    assert series_slot("CUST12345678") == 0
+    assert series_slot("8888888888") == 0
+    assert series_slot("CUSTA1B2C3D4") == 0
+
+
+def test_label_copies_for_multi_barcode():
+    assert label_copies(70, 10) == 7
+    assert label_copies(10, 10) == 1
+    assert label_copies(11, 10) == 2
+    assert label_copies(1, 0) == 1
+    assert label_copies(0, 10) == 0
+    assert label_copies(-3, 10) == 0
 
 
 def test_parse_own_barcode():

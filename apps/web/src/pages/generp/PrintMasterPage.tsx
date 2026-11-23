@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BILL_FORMATS, normalizeBillFormat } from '../../lib/generp/billFormat'
+import { BILL_FORMATS, readLocalBillFormat, writeLocalBillFormat } from '../../lib/generp/billFormat'
 import { api, ApiError } from '../../api/client'
 import { ExportFormatButtons } from '../../components/generp/ExportFormatButtons'
 import { downloadExcel, type SpreadsheetFormat } from '../../lib/generp/exportExcel'
@@ -30,7 +30,6 @@ const ORIENTATIONS = ['PORTRAIT', 'LANDSCAPE'] as const
 const PRINT_MODES = ['NORMAL', 'THERMAL', 'DOT_MATRIX'] as const
 
 type FormState = {
-  printer_name: string
   bill_format: string
   paper_size: string
   custom_width_mm: number
@@ -45,7 +44,6 @@ type FormState = {
 }
 
 const EMPTY_FORM: FormState = {
-  printer_name: '',
   bill_format: 'A4',
   paper_size: 'A4',
   custom_width_mm: 0,
@@ -68,8 +66,7 @@ function pickOption(value: string | null | undefined, options: readonly string[]
 
 function toForm(cfg: PrintConfig): FormState {
   return {
-    printer_name: String(cfg.printer_name || ''),
-    bill_format: normalizeBillFormat(cfg.bill_format),
+    bill_format: readLocalBillFormat(cfg.code),
     paper_size: pickOption(cfg.paper_size, PAPER_SIZES, 'A4'),
     custom_width_mm: Number(cfg.custom_width_mm || 0),
     custom_height_mm: Number(cfg.custom_height_mm || 0),
@@ -87,7 +84,6 @@ export function PrintMasterPage() {
   const [configs, setConfigs] = useState<PrintConfig[]>([])
   const [selectedId, setSelectedId] = useState<string>('')
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
-  const [printers, setPrinters] = useState<Array<{ name: string; is_default?: boolean }>>([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -99,13 +95,7 @@ export function PrintMasterPage() {
   const load = useCallback(async () => {
     setError('')
     try {
-      const [rows, printerData] = await Promise.all([
-        api.get<PrintConfig[]>('/print-configs'),
-        api.get<{ printers?: Array<{ name: string; is_default?: boolean }> }>('/print-configs/printers').catch(
-          () => ({ printers: [] }),
-        ),
-      ])
-      setPrinters(printerData.printers || [])
+      const rows = await api.get<PrintConfig[]>('/print-configs')
       setConfigs(rows)
       const keep = rows.find((r) => r.id === selectedId) ?? rows[0]
       if (keep) {
@@ -147,8 +137,6 @@ export function PrintMasterPage() {
     setError('')
     try {
       const updated = await api.patch<PrintConfig>(`/print-configs/${selectedId}`, {
-        printer_name: form.printer_name.trim() || null,
-        bill_format: form.bill_format,
         paper_size: form.paper_size,
         custom_width_mm: form.custom_width_mm || null,
         custom_height_mm: form.custom_height_mm || null,
@@ -160,6 +148,7 @@ export function PrintMasterPage() {
         margin_left_mm: form.margin_left_mm,
         copies: form.copies,
       })
+      writeLocalBillFormat(selected?.code || updated.code, form.bill_format)
       setConfigs((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
       setForm(toForm(updated))
       alert('Print settings saved.')
@@ -176,7 +165,6 @@ export function PrintMasterPage() {
       headers: [
         'Code',
         'Name',
-        'Printer',
         'Bill format',
         'Paper',
         'Orientation',
@@ -187,8 +175,7 @@ export function PrintMasterPage() {
       rows: configs.map((c) => [
         c.code,
         c.name,
-        c.printer_name || '',
-        c.bill_format || '',
+        readLocalBillFormat(c.code),
         c.paper_size,
         c.orientation,
         c.print_mode,
@@ -202,10 +189,9 @@ export function PrintMasterPage() {
     <div className="settings-page print-master-page">
       <h2>Print Master</h2>
       <p className="hint">
-        Choose a document type and set the default printer and <strong>bill format</strong> for{' '}
-        <strong>this computer</strong>, plus paper size (A5 / thermal / etc.), margins, and print
-        mode. Each PC keeps its own printer and bill format. Paper size in the database is a shared
-        fallback. To move or hide fields on the bill (Super Admin), use{' '}
+        Paper, orientation, margins and print mode are saved for this product. The paper format
+        (A4, A5, A6, thermal) is remembered in this browser only. Printing opens this computer&apos;s
+        print dialog. To arrange fields on the bill, use{' '}
         <Link to="/print_template_designer">Print Template Designer</Link>.
       </p>
       {error && <div className="error-banner">{error}</div>}
@@ -238,28 +224,7 @@ export function PrintMasterPage() {
         <div className="settings-box-title">Print Settings</div>
 
         <label className="settings-field">
-          <span>Default printer (this PC)</span>
-          <select
-            className="input"
-            value={form.printer_name}
-            onChange={(e) => setForm((f) => ({ ...f, printer_name: e.target.value }))}
-          >
-            <option value="">Windows default printer</option>
-            {form.printer_name &&
-              !printers.some((p) => p.name === form.printer_name) && (
-                <option value={form.printer_name}>{form.printer_name} (saved)</option>
-              )}
-            {printers.map((p) => (
-              <option key={p.name} value={p.name}>
-                {p.name}
-                {p.is_default ? ' (Windows default)' : ''}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="settings-field">
-          <span>Bill format (this PC)</span>
+          <span>Bill format (this browser)</span>
           <select
             className="input"
             value={form.bill_format}

@@ -1,0 +1,129 @@
+.tpl-preview-float {
+  position: fixed;
+  z-index: 1300;
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+  background: #f8fafc;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
+  overflow: hidden;
+}
+
+.tpl-preview-float-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--ink, #0f172a);
+  color: #f8fafc;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+  font-size: 12px;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.tpl-preview-float-head span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tpl-preview-float-head .tpl-preview-drag {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.tpl-preview-win-btn {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tpl-preview-win-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.tpl-preview-float-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tpl-preview-float-body:has(> .bd-canvas) {
+  overflow: hidden;
+  padding: 0;
+}
+
+.tpl-preview-float.bill-designer .bd-canvas-inner {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 0 8px;
+  align-items: center;
+}
+
+.tpl-preview-float.bill-designer .bd-canvas-caption,
+.tpl-preview-float.bill-designer .bd-canvas-note,
+.tpl-preview-float.bill-designer .bd-canvas-sizekey {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding-left: 8px;
+  padding-right: 8px;
+  white-space: normal;
+  height: auto;
+  text-align: center;
+  justify-content: center;
+}
+
+.tpl-preview-float-body > .bd-canvas,
+.tpl-preview-float.bill-designer .bd-preview-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  width: 100%;
+}
+
+.tpl-preview-float.bill-designer {
+  min-height: 0;
+  gap: 0;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.tpl-preview-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, #94a3b8 50%);
+}
+
+.tpl-preview-float .tpl-preview-stage {
+  min-height: 0;
+}

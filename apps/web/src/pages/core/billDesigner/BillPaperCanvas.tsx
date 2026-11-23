@@ -28,9 +28,7 @@ import {
   type Selection,
   type Shape,
 } from './types'
-import { useAuth } from '../../../auth/AuthContext'
 import {
-  SAMPLE,
   clamp,
   computePrintLayout,
   contentWidth,
@@ -44,6 +42,7 @@ import {
   previewText,
   r1,
   reorderColumnsByX,
+  sampleFromFields,
   shapeAngle,
   shapeKind,
   shapePageBoxes,
@@ -197,9 +196,8 @@ export const BillPaperCanvas = forwardRef<CanvasHandle, Props>(function BillPape
     return () => ro.disconnect()
   }, [])
 
-  const availW = Math.max(viewport.w - 28, 40)
-  const availH = Math.max(viewport.h - 78, 40)
-  const fitScale = Math.max(0.2, Math.min(availW / paperW, availH / paperH))
+  const availW = Math.max(viewport.w, 40)
+  const fitScale = Math.max(0.2, availW / paperW)
   const scale = fit ? fitScale : manualScale
 
   useEffect(() => {
@@ -241,24 +239,8 @@ export const BillPaperCanvas = forwardRef<CanvasHandle, Props>(function BillPape
   }, [scale, setZoom])
 
   /* ───────── derived layout ───────── */
-  const { product, labels, displayName } = useAuth()
-  const sample: Record<string, unknown> = { ...SAMPLE, bill_title: billTitle }
-  if (product && product !== 'hospital') {
-    sample.hospital_name = displayName || labels.company || 'Company'
-    sample.hospital_email = 'billing@example.com'
-    sample.hospital_website = 'www.example.com'
-    sample.hospital_software_id = ''
-    sample.patient_no = 'C00021'
-    sample.patient_name = `Sample ${labels.party || 'Party'}`
-    sample.doctor_name = ''
-    sample.referring_doctor = ''
-    sample.department_name = ''
-    sample.lines = [
-      { sr: '1', code: 'ITM1', name: 'Sample Item 1', category: 'General', rate: '500.00', qty: '1', amount: '500.00' },
-      { sr: '2', code: 'ITM2', name: 'Sample Item 2', category: 'General', rate: '350.00', qty: '1', amount: '350.00' },
-    ]
-  }
-  const lineCount = Math.min(3, SAMPLE.lines.length)
+  const { sample, lines } = sampleFromFields(bands, billTitle)
+  const lineCount = Math.max(1, lines.length || 1)
   const ctx: LayoutCtx = {
     free,
     fitDetail,
@@ -750,7 +732,6 @@ export const BillPaperCanvas = forwardRef<CanvasHandle, Props>(function BillPape
   const renderDetail = () => {
     const cols = (bands.columns || []).filter((f) => f.visible && f.x_mm !== null && f.x_mm !== undefined)
     if (!cols.length) return null
-    const lines = SAMPLE.lines.slice(0, 3)
     const boxes = cols.map((f) => pl.placed[keyOf('columns', String(f.id || ''))]).filter(Boolean)
     if (!boxes.length) return null
     const ordered = [...cols].sort((a, b) => num(a.x_mm) - num(b.x_mm))

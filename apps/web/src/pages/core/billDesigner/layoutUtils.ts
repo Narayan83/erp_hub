@@ -55,59 +55,27 @@ export const STANDARD_PAGE_LABELS: { code: string; label: string }[] = [
 export const TEXT_FIELDS = new Set(['bill_title', 'computer_note', 'signature', 'thanks'])
 export const STATIC_TEXT_PLACEHOLDERS = new Set(['', 'Caption', 'Custom caption text', 'Text'])
 
-/** Same sample as the server preview, so the sheet matches a printed bill. */
-export const SAMPLE: Record<string, unknown> & { lines: Record<string, string>[] } = {
-  hospital_name: 'City Care Hospital',
-  hospital_address: '12 Main Road, Sample City',
-  hospital_phone: '080-4000-1000',
-  hospital_mobile: '98765-43210',
-  hospital_email: 'billing@hospital.example',
-  hospital_gstin: '29AAAAA0000A1Z5',
-  hospital_registration_number: 'REG-KA-12345',
-  hospital_website: 'www.hospital.example',
-  hospital_software_id: 'HMS-001',
-  patient_no: 'P00021',
-  patient_name: 'Anita Rao',
-  patient_age: '34',
-  patient_gender: 'Female',
-  doctor_name: 'Dr Sharma',
-  referring_doctor: 'Dr Iyer',
-  department_name: 'General Medicine',
-  bill_no: 'OP-1042',
-  bill_date: '23/09/2026',
-  voucher_no: 'ADV-18',
-  voucher_date: '23/09/2026',
-  admission_no: 'IP-220',
-  ward_bed: 'General / 12',
-  stay_days: '3',
-  admission_date: '20/09/2026',
-  discharge_date: '23/09/2026',
-  scheme: 'General',
-  cash_credit: 'Cash',
-  token_number: '7',
-  sample_no: 'S-88',
-  visit_category: 'OPD',
-  gross_amount: '850.00',
-  admin_charges: '0.00',
-  scheme_discount: '50.00',
-  adjust_advance: '200.00',
-  net_amount: '600.00',
-  receipt_amount: '5,000.00',
-  balance_after: '5,000.00',
-  payment_mode: 'Cash',
-  remarks: 'Sample preview',
-  lines: [
-    { sr: '1', code: 'CON', name: 'Consultation', category: 'OPD', rate: '500.00', qty: '1', amount: '500.00' },
-    {
-      sr: '2',
-      code: 'CBC',
-      name: 'Complete Blood Count',
-      category: 'Lab',
-      rate: '350.00',
-      qty: '1',
-      amount: '350.00',
-    },
-  ],
+/** Preview text comes from the field labels on the active product's catalog. */
+export function sampleFromFields(
+  bands: BandFields,
+  billTitle: string,
+): { sample: Record<string, unknown>; lines: Record<string, string>[] } {
+  const sample: Record<string, unknown> = { bill_title: billTitle || 'Bill' }
+  for (const band of BAND_IDS) {
+    for (const field of bands[band] || []) {
+      const id = String(field.id || '')
+      if (!id || id.startsWith('static_') || id.startsWith('copy_')) continue
+      sample[id] = String(field.label || id)
+    }
+  }
+  const columns = (bands.columns || []).filter((field) => field.visible && field.id)
+  const line: Record<string, string> = {}
+  for (const field of columns) {
+    const id = String(field.id || '')
+    if (id) line[id] = String(field.label || id)
+  }
+  const lines = Object.keys(line).length ? [line, { ...line }] : []
+  return { sample, lines }
 }
 
 /* ───────────────────────── paper helpers ───────────────────────── */
@@ -346,21 +314,6 @@ export function normalizePrintY(fields: Field[]): void {
   })
 }
 
-const SMALL_KEEP: Record<string, Set<string>> = {
-  header: new Set(['hospital_name', 'bill_title', 'hospital_mobile']),
-  meta: new Set(['patient_name', 'bill_no', 'bill_date', 'doctor_name']),
-  columns: new Set(['name', 'qty', 'amount']),
-  totals: new Set(['net_amount']),
-  footer: new Set(['payment_mode', 'signature']),
-}
-const TINY_KEEP: Record<string, Set<string>> = {
-  header: new Set(['hospital_name', 'bill_title']),
-  meta: new Set(['patient_name', 'bill_no', 'bill_date']),
-  columns: new Set(['name', 'amount']),
-  totals: new Set(['net_amount']),
-  footer: new Set(['payment_mode', 'signature']),
-}
-
 function clearGeometry(f: Field) {
   f.x_mm = null
   f.y_mm = null
@@ -368,13 +321,23 @@ function clearGeometry(f: Field) {
   f.height_mm = null
 }
 
-/** Hide non-essential fields and reflow so content fits quarter-page stock. */
+function keepCount(band: string, tiny: boolean): number {
+  if (band === 'header') return tiny ? 2 : 3
+  if (band === 'meta') return tiny ? 3 : 4
+  if (band === 'columns') return tiny ? 2 : 3
+  if (band === 'footer') return 2
+  return 1
+}
+
+/** Hide extra fields and reflow so content fits a small page. Keeps the catalog's own fields. */
 export function compactForSmallPaper(bands: BandFields, paperW: number, paperH: number, force = false): boolean {
   if (!force && !isSmallPaper(paperW, paperH)) return false
-  const keep = paperW <= 80 || paperH <= 110 ? TINY_KEEP : SMALL_KEEP
+  const tiny = paperW <= 80 || paperH <= 110
   for (const band of BAND_IDS) {
     const fields = bands[band] || []
-    const allowed = keep[band] || new Set<string>()
+    const candidates = fields.filter((f) => !String(f.id || '').startsWith('static_'))
+    const allowed = new Set(candidates.slice(0, keepCount(band, tiny)).map((f) => String(f.id || '')))
+    let centeredHeader = false
     for (const f of fields) {
       const fid = String(f.id || '')
       if (fid.startsWith('static_')) {
@@ -383,7 +346,10 @@ export function compactForSmallPaper(bands: BandFields, paperW: number, paperH: 
       }
       f.visible = allowed.has(fid)
       clearGeometry(f)
-      if (allowed.has(fid) && band === 'header' && fid === 'hospital_name') f.align = 'center'
+      if (f.visible && band === 'header' && !centeredHeader) {
+        f.align = 'center'
+        centeredHeader = true
+      }
       if (fid === 'bill_title') f.align = 'center'
       if (f.visible && (f.font_size_pt === null || f.font_size_pt === undefined)) {
         f.font_size_pt = fontPt(fid, band, paperW)

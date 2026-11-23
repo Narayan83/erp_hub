@@ -14,7 +14,6 @@ import {
   BARCODE_LAYOUTS,
   DEFAULT_BARCODE_LABEL_SETTINGS,
   mmWithCm,
-  openBarcodePrint,
   parseBarcodeLabelSettings,
   buildPrintHtml,
   buildPrintHtmlMany,
@@ -26,14 +25,7 @@ import {
   type BarcodeLabelSettings,
   type LabelPrintInput,
 } from '../../lib/generp/barcodeLabels'
-import {
-  emptyLayoutPrinters,
-  loadInstalledPrinters,
-  loadLayoutPrinters,
-  saveLayoutPrinter,
-  type LayoutPrinters,
-  type PrinterInfo,
-} from '../../lib/generp/barcodePrinters'
+import { printHtmlOnThisPc } from '../../print/printOnThisPc'
 import { useAuth } from '../../auth/AuthContext'
 import { canEditPrintTemplates } from '../../auth/roles'
 import { encodeOwnBarcode, ownBarcodeMrp } from '../../lib/generp/ownBarcode'
@@ -93,15 +85,9 @@ function reorderFields(fields: BarcodeFieldMapping[], fromId: string, toId: stri
 function LayoutGuide({
   active,
   onPick,
-  printers,
-  layoutPrinters,
-  onPrinterChange,
 }: {
   active: BarcodeLayoutId
   onPick: (id: BarcodeLayoutId) => void
-  printers?: PrinterInfo[]
-  layoutPrinters?: LayoutPrinters
-  onPrinterChange?: (id: BarcodeLayoutId, printer: string) => void
 }) {
   const items: { id: BarcodeLayoutId; sketch: string; note: string }[] = [
     {
@@ -125,47 +111,17 @@ function LayoutGuide({
       note: 'Your width, columns, gaps',
     },
   ]
-  const showPrinters = Boolean(printers && layoutPrinters && onPrinterChange)
   return (
-    <div className={`layout-guide${showPrinters ? ' layout-guide--print' : ''}`}>
-      {items.map((it) => {
-        const saved = layoutPrinters?.[it.id] || ''
-        const known = (printers || []).some((p) => p.name === saved)
-        return (
-          <div
-            key={it.id}
-            className={`layout-card${active === it.id ? ' active' : ''}${showPrinters ? ' layout-card--printer' : ''}`}
-          >
-            <button type="button" className="layout-card-pick" onClick={() => onPick(it.id)}>
-              <div className="layout-sketch">{it.sketch}</div>
-              <div className="layout-card-title">{BARCODE_LAYOUTS[it.id].title}</div>
-              <div className="layout-card-note">{it.note}</div>
-            </button>
-            {showPrinters && (
-              <label className="layout-card-printer">
-                <span>Printer (this PC)</span>
-                <select
-                  className="input"
-                  value={saved}
-                  onChange={(e) => {
-                    onPick(it.id)
-                    onPrinterChange?.(it.id, e.target.value)
-                  }}
-                >
-                  <option value="">Windows default</option>
-                  {saved && !known && <option value={saved}>{saved} (saved)</option>}
-                  {(printers || []).map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.name}
-                      {p.is_default ? ' (Windows default)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-          </div>
-        )
-      })}
+    <div className="layout-guide">
+      {items.map((it) => (
+        <div key={it.id} className={`layout-card${active === it.id ? ' active' : ''}`}>
+          <button type="button" className="layout-card-pick" onClick={() => onPick(it.id)}>
+            <div className="layout-sketch">{it.sketch}</div>
+            <div className="layout-card-title">{BARCODE_LAYOUTS[it.id].title}</div>
+            <div className="layout-card-note">{it.note}</div>
+          </button>
+        </div>
+      ))}
     </div>
   )
 }
@@ -194,8 +150,6 @@ export function BarcodeGenerationPage() {
   const [extras, setExtras] = useState<Record<string, string>>({ expiry: '' })
   const [dragFieldId, setDragFieldId] = useState<string | null>(null)
   const [dropFieldId, setDropFieldId] = useState<string | null>(null)
-  const [printers, setPrinters] = useState<PrinterInfo[]>([])
-  const [layoutPrinters, setLayoutPrinters] = useState<LayoutPrinters>(emptyLayoutPrinters)
   const [printOk, setPrintOk] = useState('')
   const [printError, setPrintError] = useState('')
   const [sheetPreview, setSheetPreview] = useState<{ title: string; html: string } | null>(null)
@@ -291,23 +245,6 @@ export function BarcodeGenerationPage() {
       .then(setCompanyProfile)
       .catch(() => setCompanyProfile(null))
   }, [])
-
-  useEffect(() => {
-    void (async () => {
-      const [list, saved] = await Promise.all([loadInstalledPrinters(), loadLayoutPrinters()])
-      setPrinters(list)
-      setLayoutPrinters(saved)
-    })()
-  }, [])
-
-  const persistLayoutPrinter = async (id: BarcodeLayoutId, printer: string) => {
-    setLayoutPrinters((prev) => ({ ...prev, [id]: printer }))
-    try {
-      await saveLayoutPrinter(id, printer)
-    } catch {
-      /* kept in this browser even if the PC file cannot be written */
-    }
-  }
 
   const selectProduct = async (p: Product) => {
     setError('')
@@ -595,34 +532,19 @@ export function BarcodeGenerationPage() {
   const printLabels = async () => {
     const payload = await preparePrintPayload()
     if (!payload) return
-    const printer = (layoutPrinters[layoutId] || '').trim()
+    const html = buildPrintHtml(payload, { autoPrint: false })
+    const count = payload.copies
+    setSheetPreview({
+      title: `Barcode ${layoutId} · ${count} label${count === 1 ? '' : 's'} Preview`,
+      html,
+    })
     setPrintOk('')
     setPrintError('')
-    setBusy(true)
     try {
-      if (printers.length > 0 || printer) {
-        const result = await api.post<{ ok?: boolean; message?: string; pdf_path?: string; printer?: string }>(
-          '/print-configs/print',
-          {
-            html: buildPrintHtml(payload, { autoPrint: false }),
-            printer_name: printer || null,
-            copies: 1,
-          },
-        )
-        setPrintOk(
-          result.message ||
-            (result.pdf_path
-              ? `Saved PDF to ${result.pdf_path}`
-              : `Sent ${payload.copies} label${payload.copies === 1 ? '' : 's'} to ${result.printer || printer || 'Windows default printer'}`),
-        )
-      } else {
-        openBarcodePrint(payload)
-      }
+      printHtmlOnThisPc(html)
+      setPrintOk(`Opened the print dialog for ${count} label${count === 1 ? '' : 's'}`)
     } catch (err) {
-      setPrintError(err instanceof ApiError ? err.message : 'Print failed — opening browser print')
-      openBarcodePrint(payload)
-    } finally {
-      setBusy(false)
+      setPrintError(err instanceof Error ? err.message : 'Print failed')
     }
   }
 
@@ -675,39 +597,19 @@ export function BarcodeGenerationPage() {
       alert('No barcodes ready to print.')
       return
     }
-    const printer = (layoutPrinters[layoutId] || '').trim()
     const count = payloads.reduce((s, p) => s + p.copies, 0)
+    const html = buildPrintHtmlMany(payloads, { autoPrint: false })
+    setSheetPreview({
+      title: `Batch barcodes · ${count} label${count === 1 ? '' : 's'} Preview`,
+      html,
+    })
     setPrintOk('')
     setPrintError('')
-    setBusy(true)
     try {
-      if (printers.length > 0 || printer) {
-        const result = await api.post<{ ok?: boolean; message?: string; pdf_path?: string; printer?: string }>(
-          '/print-configs/print',
-          {
-            html: buildPrintHtmlMany(payloads, { autoPrint: false }),
-            printer_name: printer || null,
-            copies: 1,
-          },
-        )
-        setPrintOk(
-          result.message ||
-            `Sent ${count} label${count === 1 ? '' : 's'} to ${result.printer || printer || 'Windows default printer'}`,
-        )
-      } else {
-        const html = buildPrintHtmlMany(payloads)
-        const w = window.open('', '_blank', 'width=640,height=480')
-        if (!w) {
-          alert('Allow pop-ups to print labels.')
-          return
-        }
-        w.document.write(html)
-        w.document.close()
-      }
+      printHtmlOnThisPc(html)
+      setPrintOk(`Opened the print dialog for ${count} label${count === 1 ? '' : 's'}`)
     } catch (err) {
-      setPrintError(err instanceof ApiError ? err.message : 'Print failed')
-    } finally {
-      setBusy(false)
+      setPrintError(err instanceof Error ? err.message : 'Print failed')
     }
   }
 
@@ -967,15 +869,9 @@ export function BarcodeGenerationPage() {
           <div className="settings-box">
             <div className="settings-box-title">Print</div>
             <p className="hint" style={{ margin: '0 0 8px' }}>
-              Pick a sticker size and its printer. The printer is remembered on this PC for that size.
+              Pick a sticker size. Print opens this computer's print dialog.
             </p>
-            <LayoutGuide
-              active={layoutId}
-              onPick={setLayoutId}
-              printers={printers}
-              layoutPrinters={layoutPrinters}
-              onPrinterChange={(id, name) => void persistLayoutPrinter(id, name)}
-            />
+            <LayoutGuide active={layoutId} onPick={setLayoutId} />
             {layoutId === 'CUSTOM' && canEditLayout && (
               <BarcodeSheetSettings
                 settings={settings}
@@ -1059,9 +955,6 @@ export function BarcodeGenerationPage() {
               {` · ${layout.perRow} per row`}
               {layout.columnGapMm ? ` · column gap ${mmWithCm(layout.columnGapMm)}` : ''}
               {layout.rowGapMm ? ` · row gap ${mmWithCm(layout.rowGapMm)}` : ''}
-              {layoutPrinters[layoutId]
-                ? ` · ${layoutPrinters[layoutId]}`
-                : ' · Windows default printer'}
             </p>
             <p className="hint" style={{ margin: '4px 0 0' }}>
               If print runs past the tear line, set Bottom gap to 0 in Settings (the printer
@@ -1368,10 +1261,6 @@ export function BarcodeGenerationPage() {
         <PrintPreview
           title={sheetPreview.title}
           html={sheetPreview.html}
-          initialPrinter={layoutPrinters[layoutId] || ''}
-          showCopies={false}
-          saveDefaultLabel="Save as default for this size"
-          onSaveDefault={(printer) => persistLayoutPrinter(layoutId, printer)}
           onClose={() => setSheetPreview(null)}
         />
       )}

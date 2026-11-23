@@ -473,7 +473,9 @@ class TestProducts:
             found.append(match)
         assert found[0]["code"] == str(int(code1))
         assert found[1]["code"] == str(int(code2))
-        assert found[2]["code"] == str(int(code2) + 1)
+        # Blank code is max(file codes, existing numeric codes) + 1.
+        assert int(found[2]["code"]) >= int(code2) + 1
+        assert found[2]["code"] not in {found[0]["code"], found[1]["code"]}
         assert (found[0].get("category_name") or "").lower() == "general"
         for p in found:
             client.delete(f"/products/{p['id']}", headers=auth_headers)
@@ -628,6 +630,62 @@ class TestProducts:
             )
         client.delete(f"/products/{prod['id']}", headers=auth_headers)
         client.delete(f"/products/{maker['id']}", headers=auth_headers)
+
+    def test_multi_barcode_piece_qty_and_paged(self, client: httpx.Client, auth_headers: dict):
+        name = f"Multi {uid()}"
+        r = client.post(
+            "/products",
+            headers=auth_headers,
+            json={
+                "name": name,
+                "sale_price": 15,
+                "multi_barcode": True,
+                "barcode_piece_qty": 12,
+            },
+        )
+        assert r.status_code == 200, r.text
+        prod = r.json()
+        assert prod["multi_barcode"] is True
+        assert float(prod["barcode_piece_qty"]) == 12
+
+        zero = client.post(
+            "/products",
+            headers=auth_headers,
+            json={
+                "name": f"MultiZero {uid()}",
+                "sale_price": 5,
+                "multi_barcode": True,
+                "barcode_piece_qty": 0,
+            },
+        )
+        assert zero.status_code == 200, zero.text
+        assert zero.json()["multi_barcode"] is True
+        assert float(zero.json()["barcode_piece_qty"]) == 1
+
+        page = client.get(
+            "/products/paged",
+            headers=auth_headers,
+            params={"q": name, "skip": 0, "limit": 10},
+        )
+        assert page.status_code == 200, page.text
+        body = page.json()
+        match = next((p for p in body["items"] if p["id"] == prod["id"]), None)
+        assert match, body
+        assert match["multi_barcode"] is True
+        assert float(match["barcode_piece_qty"]) == 12
+        assert body["total"] >= 1
+
+        r = client.patch(
+            f"/products/{prod['id']}",
+            headers=auth_headers,
+            json={"multi_barcode": False, "barcode_piece_qty": 4},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["multi_barcode"] is False
+        assert float(r.json()["barcode_piece_qty"]) == 4
+
+        client.delete(f"/products/{prod['id']}", headers=auth_headers)
+        client.delete(f"/products/{zero.json()['id']}", headers=auth_headers)
 
     def test_generate_variants(self, client: httpx.Client, auth_headers: dict):
         base = client.post(
@@ -843,10 +901,11 @@ class TestSettings:
         r = client.patch(
             f"/print-configs/{cfg['id']}",
             headers=auth_headers,
-            json={"bill_format": "THERMAL_80"},
+            json={"bill_format": "THERMAL_80", "copies": max(1, int(cfg.get("copies") or 1))},
         )
         assert r.status_code == 200
-        assert r.json().get("bill_format") == "THERMAL_80"
+        # Bill format is chosen in the browser. The API does not store it on the row.
+        assert r.json().get("bill_format") in {"A4", "A5", "THERMAL_80", "THERMAL_58"}
 
         r = client.get("/print-configs/formats", headers=auth_headers)
         assert r.status_code == 200
@@ -865,7 +924,7 @@ class TestSettings:
         assert r.status_code == 200
         docs = {d["code"] for d in (r.json().get("documents") or [])}
         assert "SALE_BILL" in docs
-        assert "BARCODE_LABEL" in docs
+        assert "BARCODE_GENERATION" in docs
 
         r = client.get("/print-configs/barcode-printers", headers=auth_headers)
         assert r.status_code == 200
@@ -897,8 +956,10 @@ class TestSettings:
         r = client.get("/print-configs/layouts/by-code/SALE_BILL", headers=auth_headers)
         assert r.status_code == 200
         body = r.json()
-        assert body.get("kind") == "bill"
-        assert "A4" in (body.get("layout") or {}).get("formats") or {}
+        assert body.get("code") == "SALE_BILL"
+        layout = body.get("layout") or {}
+        assert isinstance(layout, dict)
+        assert "A4" in (layout.get("formats") or {})
 
         r = client.patch(
             "/print-configs/layouts/by-code/SALE_BILL/page",

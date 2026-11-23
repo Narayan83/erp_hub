@@ -80,9 +80,8 @@ const toDraft = (c: PrintConfig): Draft => ({
 
 function payloadOf(d: Draft) {
   const custom = d.paper_size === 'CUSTOM'
-  return {
+    return {
     name: d.name.trim(),
-    printer_name: d.printer_name.trim() || null,
     paper_size: d.paper_size,
     custom_width_mm: custom ? Number(d.custom_width_mm) || null : null,
     custom_height_mm: custom ? Number(d.custom_height_mm) || null : null,
@@ -104,13 +103,10 @@ type CatalogDoc = {
   kind?: string
 }
 
-type PrinterInfo = { name: string; is_default?: boolean }
-
 export function PrintMasterPage() {
   const navigate = useNavigate()
   const [rows, setRows] = useState<PrintConfig[]>([])
   const [catalogDocs, setCatalogDocs] = useState<CatalogDoc[]>([])
-  const [printers, setPrinters] = useState<PrinterInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -124,18 +120,14 @@ export function PrintMasterPage() {
     setLoading(true)
     setError(null)
     try {
-      const [configs, catalog, printerData] = await Promise.all([
+      const [configs, catalog] = await Promise.all([
         api.get<PrintConfig[]>('/print-configs'),
         api
           .get<{ documents?: CatalogDoc[] }>('/print-configs/layouts/catalog')
           .catch(() => ({ documents: [] })),
-        api
-          .get<{ printers?: PrinterInfo[] }>('/print-configs/printers')
-          .catch(() => ({ printers: [] })),
       ])
       setRows(configs)
       setCatalogDocs(catalog.documents || [])
-      setPrinters(printerData.printers || [])
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -160,7 +152,7 @@ export function PrintMasterPage() {
   const visible = useMemo(() => {
     const q = filter.trim().toLowerCase()
     if (!q) return rows
-    return rows.filter((r) => `${r.code} ${r.name} ${r.printer_name || ''}`.toLowerCase().includes(q))
+    return rows.filter((r) => `${r.code} ${r.name}`.toLowerCase().includes(q))
   }, [rows, filter])
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
@@ -246,10 +238,9 @@ export function PrintMasterPage() {
         </button>
       </div>
       <p className="text-secondary small mb-3">
-        Choose the printer, paper, orientation, margins and print mode for each document. Printer choice
-        is saved on <strong>this PC only</strong> — other billing stations keep their own printer (or
-        Windows default if unset). Use <strong>Design bill template</strong> to arrange fields, margins,
-        lines and shapes on the page.
+        Paper, orientation, margins and print mode are saved for this product. Printing opens the
+        print dialog on the computer that is billing, so that computer&apos;s printers and copies
+        are used. Use <strong>Design bill template</strong> to arrange fields on the page.
       </p>
 
       {error && (
@@ -271,7 +262,6 @@ export function PrintMasterPage() {
             <tr>
               <th>Code</th>
               <th>Name</th>
-              <th>Printer</th>
               <th>Paper</th>
               <th>Orientation</th>
               <th>Mode</th>
@@ -288,7 +278,6 @@ export function PrintMasterPage() {
                   <code>{r.code}</code>
                 </td>
                 <td>{r.name}</td>
-                <td>{r.printer_name || 'Windows default'}</td>
                 <td>
                   {r.paper_size === 'CUSTOM' && r.custom_width_mm && r.custom_height_mm
                     ? `Custom ${r.custom_width_mm} × ${r.custom_height_mm} mm`
@@ -331,7 +320,7 @@ export function PrintMasterPage() {
             ))}
             {!visible.length && (
               <tr>
-                <td colSpan={10} className="text-center text-secondary py-3">
+                <td colSpan={9} className="text-center text-secondary py-3">
                   {loading ? 'Loading…' : 'No print configurations yet. Use "Design bill template" to create one.'}
                 </td>
               </tr>
@@ -398,28 +387,6 @@ export function PrintMasterPage() {
                   maxLength={200}
                   onChange={(e) => set('name', e.target.value)}
                 />
-              </div>
-              <div className="col-12">
-                <label className="form-label small mb-1">Printer</label>
-                <select
-                  className="form-select form-select-sm"
-                  value={d.printer_name}
-                  onChange={(e) => set('printer_name', e.target.value)}
-                >
-                  <option value="">Windows default printer</option>
-                  {d.printer_name && !printers.some((p) => p.name === d.printer_name) ? (
-                    <option value={d.printer_name}>{d.printer_name} (unavailable)</option>
-                  ) : null}
-                  {printers.map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.name}
-                      {p.is_default ? ' (Windows default)' : ''}
-                    </option>
-                  ))}
-                </select>
-                <div className="form-text">
-                  Applies only on this computer. Leave as Windows default if this station has no dedicated printer.
-                </div>
               </div>
               <div className="col-6 col-md-3">
                 <label className="form-label small mb-1">Paper</label>

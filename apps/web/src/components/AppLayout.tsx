@@ -4,7 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { MenuOverlayProvider } from './generp/MenuOverlay'
 import Sidebar from './Sidebar'
 import { HospitalShortcutBar } from '../pages/hospital/HospitalShortcutBar'
-import { HospitalPrintPreviewHost } from '../pages/hospital/billing/HospitalPrintPreview'
+import { CorePrintPreviewHost } from '../print/CorePrintPreview'
 
 export function AppLayout() {
   const { code } = useParams()
@@ -32,7 +32,7 @@ export function AppLayout() {
           {/* Popup shortcuts are hospital UI; print preview host is shared for any product. */}
           {isHospital ? <HospitalShortcutBar /> : null}
           <Outlet />
-          <HospitalPrintPreviewHost />
+          <CorePrintPreviewHost />
         </main>
       </div>
     </MenuOverlayProvider>

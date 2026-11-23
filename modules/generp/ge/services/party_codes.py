@@ -41,6 +41,26 @@ def normalize_party_code(code: str | None) -> str:
     return raw
 
 
+def series_slot(code: str | None) -> int:
+    """Numeric place in the 1..999999 series. Other codes do not move the counter."""
+    n = parse_party_n(code)
+    if 1 <= n <= PARTY_CODE_LIMIT:
+        return n
+    return 0
+
+
+def _candidate_slots(start: int):
+    n = start if 1 <= start <= PARTY_CODE_LIMIT else 1
+    first = n
+    while n <= PARTY_CODE_LIMIT:
+        yield n
+        n += 1
+    n = 1
+    while n < first:
+        yield n
+        n += 1
+
+
 def _series_types(party_type: str) -> tuple[str, ...]:
     if party_type == "vendor":
         return VENDOR_TYPES
@@ -106,17 +126,18 @@ async def next_party_code(
     if wanted == "both":
         cust_rows = (await session.execute(select(Party.code).where(Party.party_type.in_(CUSTOMER_TYPES)))).scalars().all()
         vend_rows = (await session.execute(select(Party.code).where(Party.party_type.in_(VENDOR_TYPES)))).scalars().all()
-        occupied = {parse_party_n(c) for c in (*cust_rows, *vend_rows)}
+        occupied = {series_slot(c) for c in (*cust_rows, *vend_rows)}
     else:
         rows = (
             await session.execute(select(Party.code).where(Party.party_type.in_(_series_types(wanted))))
         ).scalars().all()
-        occupied = {parse_party_n(c) for c in rows}
+        occupied = {series_slot(c) for c in rows}
     occupied.discard(0)
-    n = (max(occupied) if occupied else 0) + 1
-    while n <= PARTY_CODE_LIMIT:
+    start = (max(occupied) if occupied else 0) + 1
+    for n in _candidate_slots(start):
+        if n in occupied:
+            continue
         code = format_party_code(n)
-        if n not in occupied and not await party_code_taken(session, wanted, code):
+        if not await party_code_taken(session, wanted, code):
             return code
-        n += 1
     raise ValueError("Party code limit reached")

@@ -1043,82 +1043,20 @@ def layout_for_format(layout: dict[str, Any], bill_format: str | None) -> dict[s
 
 
 def sample_context(code: str, *, title: str | None = None) -> dict[str, Any]:
-    raw_code = (code or "").strip().upper()
-    code = layout_family(code)
-    lines = [
-        {"sr": 1, "code": "CON", "name": "Consultation", "category": "OPD", "rate": "500.00", "qty": 1, "amount": "500.00"},
-        {"sr": 2, "code": "CBC", "name": "Complete Blood Count", "category": "Lab", "rate": "350.00", "qty": 1, "amount": "350.00"},
-    ]
-    if code in {"PHARMACY_SALE_BILL", "PHARMACY_PURCHASE_BILL"}:
-        lines = [
-            {"sr": 1, "code": "PCM", "name": "Paracetamol 500", "category": "B001", "rate": "2.00", "qty": 10, "amount": "20.00"},
-        ]
-    if code == "ADVANCE_RECEIPT":
-        lines = []
-    ctx = {
-        "hospital_name": "City Care Hospital",
-        "hospital_address": "12 Main Road, Sample City",
-        "hospital_phone": "080-4000-1000",
-        "hospital_mobile": "98765-43210",
-        "hospital_email": "billing@hospital.example",
-        "hospital_gstin": "29AAAAA0000A1Z5",
-        "hospital_registration_number": "REG-KA-12345",
-        "hospital_website": "www.hospital.example",
-        "hospital_software_id": "HMS-001",
-        "bill_title": (title or "").strip() or DOCUMENT_NAMES.get(raw_code, "Document"),
-        "patient_no": "P00021",
-        "patient_name": "Anita Rao",
-        "patient_age": "34",
-        "patient_gender": "Female",
-        "doctor_name": "Dr Sharma",
-        "referring_doctor": "Dr Iyer",
-        "department_name": "General Medicine",
-        "bill_no": "OP-1042",
-        "bill_date": "23/09/2026",
-        "voucher_no": "ADV-18",
-        "voucher_date": "23/09/2026",
-        "admission_no": "IP-220",
-        "ward_name": "General",
-        "bed_no": "12",
-        "ward_bed": "General / 12",
-        "stay_days": 3,
-        "admission_date": "20/09/2026",
-        "discharge_date": "23/09/2026",
-        "scheme": "General",
-        "cash_credit": "Cash",
-        "token_number": "7",
-        "sample_no": "S-88",
-        "visit_category": "OPD",
-        "gross_amount": "850.00",
-        "admin_charges": "0.00",
-        "scheme_discount": "50.00",
-        "adjust_advance": "200.00",
-        "net_amount": "600.00",
-        "receipt_amount": "5,000.00",
-        "amount": "5,000.00",
-        "balance_after": "5,000.00",
-        "payment_mode": "Cash",
-        "payments": [{"mode": "Cash", "amount": "600.00"}],
-        "remarks": "Sample preview",
-        "lines": lines,
-    }
-    from erp_core.product_config import get_product_name, label, load_product_config
-
-    if get_product_name() != "hospital":
-        ctx["hospital_name"] = str(load_product_config().get("display_name") or label("company", "Company"))
-        ctx["hospital_email"] = "billing@example.com"
-        ctx["hospital_website"] = "www.example.com"
-        ctx["hospital_software_id"] = ""
-        ctx["patient_no"] = "C00021"
-        ctx["patient_name"] = f"Sample {label('party', 'Party')}"
-        ctx["doctor_name"] = ""
-        ctx["referring_doctor"] = ""
-        ctx["department_name"] = ""
-        ctx["visit_category"] = ""
-        for idx, line in enumerate(ctx["lines"], start=1):
-            if str(line.get("category") or "").upper() in {"OPD", "LAB"}:
-                line["category"] = "General"
-            if str(line.get("name") or "").lower() in {"consultation", "complete blood count"}:
-                line["name"] = f"Sample Item {idx}"
-                line["code"] = f"ITM{idx}"
+    """Sample values are the active product's field labels, not a hospital bill."""
+    heading = (title or "").strip()
+    ctx: dict[str, Any] = {"bill_title": heading or (code or "").strip() or "Document"}
+    line: dict[str, Any] = {}
+    for row in FIELD_CATALOG:
+        fid = str(row.get("id") or "")
+        if not fid:
+            continue
+        text = _field_label_for_active_product(fid, str(row.get("label") or fid))
+        if row.get("band") == "columns":
+            line.setdefault(fid, text)
+        else:
+            ctx.setdefault(fid, text)
+    ctx["lines"] = [dict(line), dict(line)] if line else []
+    if heading:
+        ctx["bill_title"] = heading
     return ctx

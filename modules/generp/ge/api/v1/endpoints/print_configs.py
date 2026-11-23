@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from erp_core.product_config import get_product_name
+from erp_core.schemas.print_configs import LayoutPreviewIn, LayoutSaveIn
 from modules.generp.ge.api.deps import get_current_user, require_print_layout_editor, get_session, user_is_super_admin
 from modules.generp.ge.models.auth import User
 from modules.generp.ge.models.masters import CompanyProfile, PrintConfig
@@ -61,18 +62,8 @@ class PrintLayoutPageBody(BaseModel):
 
 
 def _to_out(obj: PrintConfig) -> PrintConfigOut:
-    db_printer = (obj.printer_name or "").strip() or None
-    migrate_db_printer(obj.code, db_printer)
-    local = get_report_printer(obj.code)
-    local_orient = get_report_orientation(obj.code)
     data = PrintConfigOut.model_validate(obj)
-    return data.model_copy(
-        update={
-            "printer_name": local or db_printer,
-            "bill_format": get_report_format(obj.code),
-            "orientation": local_orient or obj.orientation,
-        }
-    )
+    return data.model_copy(update={"printer_name": None})
 
 
 class PrintJobIn(BaseModel):
@@ -157,61 +148,37 @@ async def list_bill_formats(
 
 
 @router.get("/layouts/catalog")
-async def print_layout_catalog(_u=Depends(get_current_user)):
-    return catalog_payload()
+async def print_layout_catalog(
+    user=Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Same catalog as the core designer: this product's menus and fields."""
+    from erp_core.api.endpoints.print_configs import print_layout_catalog as core_catalog
+
+    return await core_catalog(user, session)
 
 
 @router.get("/layouts/by-code/{code}")
 async def get_print_layout(
     code: str,
-    _u=Depends(get_current_user),
+    user=Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    code_u = code.upper()
-    if code_u not in DOCUMENT_KINDS:
-        raise HTTPException(status_code=404, detail="No template for this document")
-    obj = (
-        await session.execute(
-            select(PrintConfig).where(
-                PrintConfig.product == get_product_name(),
-                PrintConfig.code == code_u,
-            )
-        )
-    ).scalar_one_or_none()
-    layout = normalize_layout(code_u, obj.layout_options if obj else None)
-    return {
-        "id": obj.id if obj else None,
-        "code": code_u,
-        "name": obj.name if obj else code_u,
-        "kind": DOCUMENT_KINDS[code_u],
-        "layout": layout,
-    }
+    from erp_core.api.endpoints.print_configs import get_print_layout as core_get
+
+    return await core_get(code, user, session)
 
 
 @router.put("/layouts/by-code/{code}")
 async def save_print_layout(
     code: str,
-    data: PrintLayoutBody,
-    _u: User = Depends(require_print_layout_editor),
+    data: LayoutSaveIn,
+    user=Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    code_u = code.upper()
-    if code_u not in DOCUMENT_KINDS:
-        raise HTTPException(status_code=404, detail="No template for this document")
-    obj = (
-        await session.execute(
-            select(PrintConfig).where(
-                PrintConfig.product == get_product_name(),
-                PrintConfig.code == code_u,
-            )
-        )
-    ).scalar_one_or_none()
-    if not obj:
-        raise HTTPException(status_code=404, detail="Print config not found")
-    layout = normalize_layout(code_u, data.layout)
-    obj.layout_options = layout
-    await session.flush()
-    return {"id": obj.id, "code": code_u, "kind": DOCUMENT_KINDS[code_u], "layout": layout}
+    from erp_core.api.endpoints.print_configs import save_print_layout as core_save
+
+    return await core_save(code, data, user, session)
 
 
 @router.patch("/layouts/by-code/{code}/page")
@@ -249,72 +216,23 @@ async def save_print_layout_page(
 @router.post("/layouts/by-code/{code}/reset")
 async def reset_print_layout(
     code: str,
-    _u: User = Depends(require_print_layout_editor),
+    user=Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    code_u = code.upper()
-    if code_u not in DOCUMENT_KINDS:
-        raise HTTPException(status_code=404, detail="No template for this document")
-    obj = (
-        await session.execute(
-            select(PrintConfig).where(
-                PrintConfig.product == get_product_name(),
-                PrintConfig.code == code_u,
-            )
-        )
-    ).scalar_one_or_none()
-    if not obj:
-        raise HTTPException(status_code=404, detail="Print config not found")
-    layout = default_document_layout(code_u)
-    obj.layout_options = layout
-    await session.flush()
-    return {"id": obj.id, "code": code_u, "kind": DOCUMENT_KINDS[code_u], "layout": layout}
+    from erp_core.api.endpoints.print_configs import reset_print_layout as core_reset
+
+    return await core_reset(code, user, session)
 
 
 @router.post("/layouts/preview")
 async def preview_print_layout(
-    data: PrintLayoutPreviewBody,
-    _u: User = Depends(require_print_layout_editor),
+    data: LayoutPreviewIn,
+    user=Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    code_u = (data.code or "").upper()
-    if code_u not in DOCUMENT_KINDS:
-        raise HTTPException(status_code=404, detail="No template for this document")
-    kind = DOCUMENT_KINDS[code_u]
-    if kind == KIND_BARCODE:
-        raise HTTPException(status_code=400, detail="Barcode preview is shown on the designer")
-    layout = normalize_layout(code_u, data.layout)
-    bill_format = resolve_layout_format(layout, data.bill_format)
-    if kind == KIND_BILL:
-        context = apply_bill_format(
-            sample_bill_context(wholesale=code_u == "WHOLESALE_BILL"),
-            bill_format,
-        )
-    else:
-        context = sample_report_context()
-    profile = (
-        await session.execute(select(CompanyProfile).where(CompanyProfile.code == "MAIN"))
-    ).scalar_one_or_none()
-    if profile is not None:
-        context.update(company_header_context(profile))
-    # Platform designed sheets (Bill Template Designer) use core renderer.
-    if isinstance(data.layout, dict) and data.layout.get("designed"):
-        from erp_core.printing.renderer import render_document_html as render_designed_html
+    from erp_core.api.endpoints.print_configs import preview_print_layout as core_preview
 
-        html = render_designed_html(
-            code=code_u,
-            context=context,
-            layout_raw=data.layout,
-            bill_format=bill_format,
-        )
-    else:
-        html = render_document_html(
-            code=code_u,
-            context=context,
-            layout_raw=layout,
-            bill_format=bill_format,
-        )
-    return HTMLResponse(content=html)
+    return await core_preview(data, user, session)
 
 
 @router.get("", response_model=list[PrintConfigOut])
@@ -328,7 +246,6 @@ async def list_configs(_u=Depends(get_current_user), session: AsyncSession = Dep
         .order_by(PrintConfig.sort_order)
     )
     rows = list(result.scalars().all())
-    sync_print_ini_codes([r.code for r in rows])
     return [_to_out(r) for r in rows]
 
 
@@ -365,24 +282,15 @@ async def update_config(
     if not obj:
         raise HTTPException(status_code=404, detail="Not found")
     payload = data.model_dump(exclude_unset=True)
+    payload.pop("printer_name", None)
+    payload.pop("bill_format", None)
     if "layout_options" in payload and not user_is_super_admin(_u):
         # Same gate as the dedicated layout APIs (Super Admin / designer permission).
         await require_print_layout_editor(_u, session)
-    printer_name = payload.pop("printer_name", None) if "printer_name" in payload else ...
-    bill_format = payload.pop("bill_format", None) if "bill_format" in payload else ...
-    orientation = payload.pop("orientation", None) if "orientation" in payload else ...
     if "layout_options" in payload and payload["layout_options"] is not None:
         payload["layout_options"] = normalize_layout(obj.code, payload["layout_options"])
     for k, v in payload.items():
         setattr(obj, k, v)
-    if printer_name is not ...:
-        set_report_printer(obj.code, printer_name)
-        # Keep DB as fallback for a first-time install on another PC
-        obj.printer_name = (printer_name or "").strip() or None
-    if bill_format is not ...:
-        set_report_format(obj.code, normalize_bill_format(bill_format))
-    if orientation is not ...:
-        set_report_orientation(obj.code, orientation)
-        obj.orientation = (orientation or "").strip() or obj.orientation
+    obj.printer_name = None
     await session.flush()
     return _to_out(obj)

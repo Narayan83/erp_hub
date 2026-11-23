@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../../api/client'
+import { TplPreviewPanel } from '../../../components/generp/TplPreviewPanel'
 import { BillPaperCanvas, type CanvasHandle } from './BillPaperCanvas'
 import {
   STANDARD_PAGE_LABELS,
@@ -73,7 +74,7 @@ const HELP_TEXT = [
   'Drag a field to move it, and drag the blue corner handle to resize it. On the Columns tab, drag column boxes left or right to reorder them. Select a field to set font name, size, and style. Add caption inserts custom printed text.',
   'Shapes: line, rectangle, square, ellipse, triangle, diamond and rounded rectangle. Drag any side or corner to resize. The round handle above a shape rotates it (or use the rotate buttons for 15° steps). "Line on every detail row" repeats a line on each detail row.',
   'Free placement lets you drag any field anywhere on the page (including column headings up and down). End page when data ends trims blank paper. Push totals to bottom makes the detail area fill the page. Fit small page keeps the essential fields for quarter-page stock.',
-  'Click a ribbon section title (Document, Page, Size, …) to collapse or expand that section; the arrow next to the title collapses the whole ribbon. Printer choice stays in Print Master. Bills keep the old layout until you save a design here.',
+  'Click a ribbon section title (Document, Page, Size, …) to collapse or expand that section; the arrow next to the title collapses the whole ribbon. Printing uses this computer\'s print dialog. Bills keep the old layout until you save a design here.',
   'Page name and millimetres are under Size. Change the name, then press Enter or click the pencil to apply. Plus copies the current page with that name and size. Standard sizes (A4, A5, …) cannot be changed — use + to create a custom size.',
   'Keyboard (click the sheet first): arrow keys move the selection (Shift = 5 mm), Ctrl+Z undo, Ctrl+C copy, Ctrl+V paste, Delete removes a selected shape. Ctrl+wheel zooms.',
 ]
@@ -541,10 +542,7 @@ export function BillTemplateDesignerPage() {
         if (cancelled) return
         const wanted = (search.get('code') || '').toUpperCase()
         const docs = catalog.documents || []
-        const first =
-          docs.find((d) => d.code === wanted)?.code ||
-          docs.find((d) => d.code === 'OPD_BILL')?.code ||
-          docs[0]?.code
+        const first = docs.find((d) => d.code === wanted)?.code || docs[0]?.code
         if (first) await loadDocument(first, { keepPublish: true })
         else setLoadingDoc(false)
       } catch (e) {
@@ -1001,7 +999,7 @@ export function BillTemplateDesignerPage() {
     syncCanvas(format)
     setNotice({
       kind: 'ok',
-      text: `Packed essential fields for ${w.toFixed(0)} × ${h.toFixed(0)} mm. Extras (address, admin charges, remarks, …) were hidden. Click Save template, then open a bill preview.`,
+      text: `Packed the first fields for ${w.toFixed(0)} × ${h.toFixed(0)} mm. Extra fields were hidden. Click Save template, then open a bill preview.`,
     })
   }
 
@@ -1592,9 +1590,17 @@ export function BillTemplateDesignerPage() {
           </div>
         </div>
 
-        <div className="bd-right">
-          {loadingDoc && !layout && <div className="bd-loading">Loading template…</div>}
-          {layout && bandsNow && (
+        <TplPreviewPanel
+          className="bill-designer"
+          title={`Page preview · ${pageLabel}`}
+          initial={{
+            y: 72,
+            w: Math.min(760, Math.max(420, window.innerWidth - 520)),
+            h: Math.max(360, window.innerHeight - 110),
+          }}
+        >
+          {loadingDoc && !layout ? <div className="bd-loading">Loading template…</div> : null}
+          {layout && bandsNow ? (
             <BillPaperCanvas
               ref={canvasRef}
               bands={bandsNow}
@@ -1632,8 +1638,8 @@ export function BillTemplateDesignerPage() {
               onPaste={pasteSelection}
               onZoomChange={setZoomPct}
             />
-          )}
-        </div>
+          ) : null}
+        </TplPreviewPanel>
       </div>
 
       {helpOpen && (
@@ -1644,9 +1650,19 @@ export function BillTemplateDesignerPage() {
         </Modal>
       )}
       {previewHtml !== null && (
-        <Modal title={`Server preview — ${docName} (${pageLabel})`} wide onClose={() => setPreviewHtml(null)}>
+        <TplPreviewPanel
+          className="bill-designer"
+          title={`Server preview — ${docName} (${pageLabel})`}
+          initial={{
+            x: 40,
+            y: 64,
+            w: Math.min(720, window.innerWidth - 80),
+            h: Math.max(360, window.innerHeight - 120),
+          }}
+          onClose={() => setPreviewHtml(null)}
+        >
           <iframe className="bd-preview-frame" title="Server preview" sandbox="" srcDoc={previewHtml} />
-        </Modal>
+        </TplPreviewPanel>
       )}
     </div>
   )

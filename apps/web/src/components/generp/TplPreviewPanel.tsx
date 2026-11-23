@@ -1,19 +1,37 @@
 import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import './tpl-preview-float.css'
 
 type Mode = 'normal' | 'minimized' | 'maximized'
 
-export function TplPreviewPanel({ title, children }: { title: string; children: ReactNode }) {
+type Box = { x?: number; y?: number; w?: number; h?: number }
+
+export function TplPreviewPanel({
+  title,
+  children,
+  className = '',
+  initial,
+  onClose,
+}: {
+  title: string
+  children: ReactNode
+  className?: string
+  initial?: Box
+  onClose?: () => void
+}) {
   const hostRef = useRef<HTMLSpanElement | null>(null)
   const [onScreen, setOnScreen] = useState(true)
   const [mode, setMode] = useState<Mode>('normal')
-  const [pos, setPos] = useState(() => ({
-    x: Math.max(16, window.innerWidth - 430),
-    y: 92,
-  }))
+  const [pos, setPos] = useState(() => {
+    const w = initial?.w ?? 390
+    return {
+      x: initial?.x ?? Math.max(16, window.innerWidth - w - 24),
+      y: initial?.y ?? 92,
+    }
+  })
   const [box, setBox] = useState(() => ({
-    w: 390,
-    h: Math.min(560, Math.max(280, window.innerHeight - 140)),
+    w: initial?.w ?? 390,
+    h: initial?.h ?? Math.min(560, Math.max(280, window.innerHeight - 140)),
   }))
   const drag = useRef<{ dx: number; dy: number } | null>(null)
   const resize = useRef<{ x: number; y: number; w: number; h: number } | null>(null)
@@ -92,7 +110,7 @@ export function TplPreviewPanel({ title, children }: { title: string; children: 
       {onScreen
         ? createPortal(
             <div
-              className={`tpl-preview-float${mode === 'maximized' ? ' is-max' : ''}${mode === 'minimized' ? ' is-min' : ''}`}
+              className={`tpl-preview-float${mode === 'maximized' ? ' is-max' : ''}${mode === 'minimized' ? ' is-min' : ''}${className ? ` ${className}` : ''}`}
               style={style}
             >
       <header
@@ -102,6 +120,7 @@ export function TplPreviewPanel({ title, children }: { title: string; children: 
         onPointerUp={onHeadUp}
         onPointerCancel={onHeadUp}
       >
+        <span className="tpl-preview-drag" aria-hidden="true">✥</span>
         <span>{title}</span>
         <button
           type="button"
@@ -119,8 +138,15 @@ export function TplPreviewPanel({ title, children }: { title: string; children: 
         >
           {mode === 'maximized' ? '❐' : '□'}
         </button>
+        {onClose ? (
+          <button type="button" className="tpl-preview-win-btn" title="Close" aria-label="Close" onClick={onClose}>
+            ×
+          </button>
+        ) : null}
       </header>
-      {mode !== 'minimized' ? <div className="tpl-preview-float-body">{children}</div> : null}
+      <div className="tpl-preview-float-body" hidden={mode === 'minimized'}>
+        {children}
+      </div>
       {mode === 'normal' ? (
         <div
           className="tpl-preview-resize"

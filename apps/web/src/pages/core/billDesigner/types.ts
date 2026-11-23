@@ -4,7 +4,7 @@ export type BandId = 'header' | 'meta' | 'columns' | 'totals' | 'footer'
 
 export const BANDS: { id: BandId; label: string }[] = [
   { id: 'header', label: 'Header' },
-  { id: 'meta', label: 'Patient details' },
+  { id: 'meta', label: 'Details' },
   { id: 'columns', label: 'Columns' },
   { id: 'totals', label: 'Totals' },
   { id: 'footer', label: 'Footer' },

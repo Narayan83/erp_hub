@@ -88,6 +88,10 @@ async def _bootstrap() -> None:
             from modules.hospital.hms.schema_columns import ensure_hospital_columns
 
             await ensure_hospital_columns(conn)
+        if module_enabled("generp"):
+            from modules.generp.ge.schema_columns import ensure_generp_columns
+
+            await ensure_generp_columns(conn)
 
     if settings.seed_on_startup:
         SessionLocal = get_session_factory()

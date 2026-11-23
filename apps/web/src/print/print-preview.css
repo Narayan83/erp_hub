@@ -1,0 +1,249 @@
+.print-preview-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  pointer-events: none;
+}
+.print-preview-layer.is-min {
+  inset: auto;
+}
+
+.print-preview-dim {
+  pointer-events: auto;
+  position: fixed;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.35);
+  cursor: default;
+  z-index: 1;
+}
+
+.print-preview-window {
+  pointer-events: auto;
+  position: fixed;
+  z-index: 2;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  background: #fff;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28);
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  min-width: 280px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.print-preview-window.is-max {
+  max-width: none;
+  max-height: none;
+}
+.print-preview-window.is-min {
+  height: auto;
+  max-height: none;
+  padding-bottom: 0;
+}
+.print-preview-window.is-min .print-preview-head {
+  margin-bottom: 0;
+  border-radius: 8px;
+}
+.print-preview-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, #94a3b8 50%);
+}
+
+.print-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 -12px 8px;
+  padding: 8px 12px;
+  background: var(--ink, #0f172a);
+  color: #f8fafc;
+  border-radius: 8px 8px 0 0;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+  flex-shrink: 0;
+}
+.print-preview-drag-handle {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  font-size: 17px;
+  line-height: 1;
+  cursor: move;
+}
+.print-preview-head h2 {
+  margin: 0;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+.print-preview-orientation {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.print-preview-close {
+  min-width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  background: transparent;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.print-preview-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.print-frame {
+  display: block;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  flex: none;
+  border: 1px solid var(--border, #e2e8f0);
+  background: #fff;
+}
+.print-frame--thermal,
+.print-frame--barcode {
+  background: #fff;
+}
+.print-frame-well {
+  background: #e2e8f0;
+  border-radius: 4px;
+  padding: 8px;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+.print-frame-well--scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.print-frame-well--page {
+  justify-content: center;
+  overflow: auto;
+  box-sizing: border-box;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+.print-preview-window .print-frame-well--page .tpl-preview-stage {
+  border: 0;
+  padding: 0;
+  background: #e2e8f0;
+  width: 100%;
+  height: 100%;
+  min-height: 160px;
+}
+.print-preview-empty {
+  margin: 24px auto;
+  color: #64748b;
+}
+
+.print-preview-window .print-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+.print-preview-window .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.print-preview-window .print-preview-ok,
+.print-preview-window .print-preview-status {
+  flex: 1;
+  margin: 0;
+  text-align: left;
+  font-size: 13px;
+}
+.print-preview-window .print-preview-ok {
+  color: #166534;
+}
+.print-preview-window .print-preview-status {
+  color: #b91c1c;
+}
+.print-preview-window .btn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+.print-preview-window .btn-primary {
+  background: #1d4ed8;
+  color: #fff;
+  border-color: #1d4ed8;
+}
+.print-preview-window .btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.print-preview-window .input {
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font: inherit;
+  background: #fff;
+  color: #0f172a;
+}
+.print-preview-window .bill-format-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  white-space: nowrap;
+}
+.print-preview-window .bill-format-field .input {
+  min-width: 150px;
+  max-width: 180px;
+}
+
+@media (max-width: 640px) {
+  .print-preview-orientation {
+    font-size: 0;
+  }
+  .print-preview-orientation::after {
+    content: attr(data-short);
+    font-size: 11px;
+  }
+}
